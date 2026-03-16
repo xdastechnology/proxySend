@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="app-layout">
+  <%- include('partials/sidebar') %>
+  <div class="main-content">
+    <%- include('partials/topbar', { pageTitle: 'Create Campaign', pageSubtitle: 'Build and launch a new messaging campaign' }) %>
+    <main class="page-content">
+
+      <% if (error) { %>
+        <div class="alert alert-danger" data-auto-dismiss>
+          <i class="fa-solid fa-circle-exclamation"></i> <%= error %>
+        </div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert alert-success" data-auto-dismiss>
+          <i class="fa-solid fa-circle-check"></i> <%= success %>
+        </div>
+      <% } %>
+
+      <% const safeTemplates = Array.isArray(templates) ? templates : []; %>
+      <% const safeContacts = Array.isArray(contacts) ? contacts : []; %>
+
+      <div class="page-header" style="margin-bottom:16px;">
+        <div>
+          <h2 style="font-size:16px; font-weight:600;">New Campaign</h2>
+          <p class="text-muted text-sm">Choose a template and recipients to start sending messages</p>
+        </div>
+        <a href="/campaigns" class="btn btn-outline">
+          <i class="fa-solid fa-arrow-left"></i> Back to Campaigns
+        </a>
+      </div>
+
+      <div class="two-col-sidebar">
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-plus" style="color:var(--primary);margin-right:6px;"></i>Campaign Details</h2>
+            </div>
+            <div class="card-body">
+              <form action="/campaigns/create" method="POST">
+                <div class="form-group">
+                  <label>Campaign Name</label>
+                  <input
+                    type="text"
+                    name="campaignName"
+                    class="form-control"
+                    placeholder="e.g. March Offer Follow-up"
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Select Template</label>
+                  <select name="templateId" class="form-control" required>
+                    <option value="" disabled selected>Choose a template</option>
+                    <% safeTemplates.forEach(template => { %>
+                      <option value="<%= template.id %>"><%= template.template_name %></option>
+                    <% }) %>
+                  </select>
+                  <% if (safeTemplates.length === 0) { %>
+                    <p class="form-hint">No templates found. <a href="/templates">Create a template first</a>.</p>
+                  <% } %>
+                </div>
+
+                <div class="form-group">
+                  <div class="flex-center" style="justify-content:space-between; margin-bottom:8px;">
+                    <label style="margin:0;">Select Contacts</label>
+                    <span class="text-sm text-muted" id="selectedCount">0 selected</span>
+                  </div>
+
+                  <% if (safeContacts.length === 0) { %>
+                    <div class="empty-state" style="padding:20px;">
+                      <i class="fa-solid fa-address-book"></i>
+                      <h3 style="font-size:16px;">No contacts available</h3>
+                      <p>Add contacts before creating a campaign.</p>
+                      <a href="/contacts" class="btn btn-outline">
+                        <i class="fa-solid fa-user-plus"></i> Add Contacts
+                      </a>
+                    </div>
+                  <% } else { %>
+                    <div class="form-row" style="margin-bottom:10px; grid-template-columns: 2fr 1fr;">
+                      <input
+                        type="text"
+                        id="campaignContactSearch"
+                        class="form-control"
+                        placeholder="Search by name, phone, or email"
+                      />
+                      <select id="campaignGenderFilter" class="form-control">
+                        <option value="all" selected>All genders</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                        <option value="unspecified">Unspecified</option>
+                      </select>
+                    </div>
+
+                    <label class="flex-center gap-8" style="margin-bottom:10px;">
+                      <input type="checkbox" id="selectAll" />
+                      <span class="text-sm">Select all contacts</span>
+                    </label>
+
+                    <div id="campaignContactList" style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:8px;">
+                      <% safeContacts.forEach(contact => { %>
+                        <label
+                          class="flex-center gap-8 campaign-contact-item"
+                          style="padding:10px 12px; border-bottom:1px solid var(--border); cursor:pointer;"
+                          data-name="<%= (contact.name || '').toLowerCase() %>"
+                          data-phone="<%= (contact.phone || '').toLowerCase() %>"
+                          data-email="<%= (contact.email || '').toLowerCase() %>"
+                          data-gender="<%= (contact.gender || 'unspecified').toLowerCase() %>"
+                        >
+                          <input
+                            type="checkbox"
+                            class="contact-checkbox"
+                            name="contactIds"
+                            value="<%= contact.id %>"
+                          />
+                          <div style="display:flex; flex-direction:column;">
+                            <span class="fw-600"><%= contact.name %></span>
+                            <span class="text-muted text-sm"><%= contact.phone %></span>
+                            <span class="text-muted text-sm"><%= contact.email || '-' %> | <%= contact.gender || 'unspecified' %></span>
+                          </div>
+                        </label>
+                      <% }) %>
+                    </div>
+                    <div id="campaignFilterEmpty" class="empty-state" style="padding:16px; display:none; margin-top:10px;">
+                      <i class="fa-solid fa-filter-circle-xmark"></i>
+                      <h3 style="font-size:15px;">No matching contacts</h3>
+                      <p>Adjust search text or gender filter</p>
+                    </div>
+                  <% } %>
+                </div>
+
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-full"
+                  <%= safeTemplates.length === 0 || safeContacts.length === 0 ? 'disabled' : '' %>
+                >
+                  <i class="fa-solid fa-paper-plane"></i> Create Campaign
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-list-check" style="color:var(--info);margin-right:6px;"></i>Readiness</h2>
+            </div>
+            <div class="card-body">
+              <div style="display:flex; flex-direction:column; gap:10px;">
+                <div class="flex-center" style="justify-content:space-between;">
+                  <span class="text-muted">Templates</span>
+                  <span class="badge <%= safeTemplates.length > 0 ? 'badge-success' : 'badge-secondary' %>">
+                    <%= safeTemplates.length %>
+                  </span>
+                </div>
+                <div class="flex-center" style="justify-content:space-between;">
+                  <span class="text-muted">Contacts</span>
+                  <span class="badge <%= safeContacts.length > 0 ? 'badge-success' : 'badge-secondary' %>">
+                    <%= safeContacts.length %>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-lightbulb" style="color:var(--warning);margin-right:6px;"></i>Tips</h2>
+            </div>
+            <div class="card-body">
+              <ul style="padding-left:18px; margin:0; display:flex; flex-direction:column; gap:8px; color:var(--text-secondary);">
+                <li>Use clear campaign names so you can track results later.</li>
+                <li>Keep template text short and personalized with variables.</li>
+                <li>Start with a small contact group before sending to all.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+</body>
+</html>

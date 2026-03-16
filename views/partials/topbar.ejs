@@ -1,0 +1,14 @@
+<header class="topbar">
+  <div class="topbar-left">
+    <h1><%= pageTitle %></h1>
+    <% if (typeof pageSubtitle !== 'undefined' && pageSubtitle) { %>
+      <p><%= pageSubtitle %></p>
+    <% } %>
+  </div>
+  <div class="topbar-right">
+    <div class="credits-badge">
+      <i class="fa-solid fa-coins"></i>
+      <%= user ? user.credits : 0 %> Credits
+    </div>
+  </div>
+</header>

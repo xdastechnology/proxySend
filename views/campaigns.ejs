@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="app-layout">
+  <%- include('partials/sidebar') %>
+  <div class="main-content">
+    <%- include('partials/topbar', { pageTitle: 'Campaigns', pageSubtitle: 'Create and manage messaging campaigns' }) %>
+    <main class="page-content">
+
+      <% if (error) { %>
+        <div class="alert alert-danger" data-auto-dismiss>
+          <i class="fa-solid fa-circle-exclamation"></i> <%= error %>
+        </div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert alert-success" data-auto-dismiss>
+          <i class="fa-solid fa-circle-check"></i> <%= success %>
+        </div>
+      <% } %>
+
+      <% const safeCampaigns = Array.isArray(campaigns) ? campaigns : []; %>
+
+      <div class="page-header">
+        <div>
+          <h2 style="font-size:16px; font-weight:600;">All Campaigns</h2>
+          <p class="text-muted text-sm"><%= safeCampaigns.length %> campaigns total</p>
+        </div>
+        <a href="/campaigns/create" class="btn btn-primary">
+          <i class="fa-solid fa-plus"></i> New Campaign
+        </a>
+      </div>
+
+      <div class="card">
+        <% if (safeCampaigns.length === 0) { %>
+          <div class="empty-state">
+            <i class="fa-solid fa-paper-plane"></i>
+            <h3>No campaigns yet</h3>
+            <p>Create your first campaign to start sending messages</p>
+            <a href="/campaigns/create" class="btn btn-primary">
+              <i class="fa-solid fa-plus"></i> Create Campaign
+            </a>
+          </div>
+        <% } else { %>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Campaign Name</th>
+                  <th>Template</th>
+                  <th>Contacts</th>
+                  <th>Progress</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% safeCampaigns.forEach(campaign => { %>
+                  <tr>
+                    <td>
+                      <a href="/campaigns/details/<%= campaign.id %>" style="font-weight:600;color:var(--text);">
+                        <%= campaign.campaign_name %>
+                      </a>
+                    </td>
+                    <td>
+                      <span class="badge badge-info">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <%= campaign.template_name || 'Unknown' %>
+                      </span>
+                    </td>
+                    <td><%= campaign.total_contacts %></td>
+                    <td style="min-width:120px;">
+                      <div class="flex-center gap-8">
+                        <span class="text-sm"><%= campaign.sent_count %>/<%= campaign.total_contacts %></span>
+                      </div>
+                      <% const pct = campaign.total_contacts > 0 ? Math.round((campaign.sent_count / campaign.total_contacts) * 100) : 0; %>
+                      <div class="progress">
+                        <div
+                          class="progress-bar <%= campaign.status === 'completed' ? 'success' : '' %>"
+                          style="width:<%= pct %>%"
+                        ></div>
+                      </div>
+                    </td>
+                    <td>
+                      <% if (campaign.status === 'completed') { %>
+                        <span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Completed</span>
+                      <% } else if (campaign.status === 'running') { %>
+                        <span class="badge badge-warning"><span class="dot orange"></span> Running</span>
+                      <% } else { %>
+                        <span class="badge badge-secondary"><i class="fa-solid fa-clock"></i> Pending</span>
+                      <% } %>
+                    </td>
+                    <td class="text-muted text-sm"><%= new Date(campaign.created_at).toLocaleDateString() %></td>
+                    <td>
+                      <div class="flex gap-8">
+                        <a href="/campaigns/details/<%= campaign.id %>" class="btn btn-outline btn-sm">
+                          <i class="fa-solid fa-eye"></i>
+                        </a>
+                        <% if (campaign.status === 'pending') { %>
+                          <a href="/campaigns/start/<%= campaign.id %>" class="btn btn-success btn-sm">
+                            <i class="fa-solid fa-play"></i>
+                          </a>
+                        <% } %>
+                        <% if (campaign.status !== 'running') { %>
+                          <button
+                            type="button"
+                            class="btn btn-danger btn-sm js-confirm-delete"
+                            data-confirm-delete-url="/campaigns/delete/<%= campaign.id %>"
+                            data-confirm-message="Delete campaign &quot;<%= campaign.campaign_name %>&quot;?"
+                          >
+                            <i class="fa-solid fa-trash"></i>
+                          </button>
+                        <% } %>
+                      </div>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+</body>
+</html>

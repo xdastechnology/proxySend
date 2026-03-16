@@ -1,0 +1,20 @@
+{
+  "watch": [
+    "app.js",
+    "config/**/*.js",
+    "controllers/**/*.js",
+    "middleware/**/*.js",
+    "models/**/*.js",
+    "routes/**/*.js",
+    "services/**/*.js"
+  ],
+  "ext": "js",
+  "ignore": [
+    "sessions/**",
+    "logs/**",
+    "data/**",
+    "public/**",
+    "views/**"
+  ],
+  "delay": "300"
+}

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="app-layout">
+  <%- include('partials/sidebar') %>
+  <div class="main-content">
+    <%- include('partials/topbar', { pageTitle: 'Templates', pageSubtitle: 'Create and manage message templates' }) %>
+    <main class="page-content">
+
+      <% if (error) { %>
+        <div class="alert alert-danger" data-auto-dismiss>
+          <i class="fa-solid fa-circle-exclamation"></i> <%= error %>
+        </div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert alert-success" data-auto-dismiss>
+          <i class="fa-solid fa-circle-check"></i> <%= success %>
+        </div>
+      <% } %>
+
+      <% const safeTemplates = Array.isArray(templates) ? templates : []; %>
+      <% const editButtons = editTemplate && Array.isArray(editTemplate.buttons) ? editTemplate.buttons : []; %>
+
+      <div class="two-col-sidebar">
+        <!-- Left: Templates List -->
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Your Templates</h2>
+                <p><%= safeTemplates.length %> templates created</p>
+              </div>
+            </div>
+
+            <% if (safeTemplates.length === 0) { %>
+              <div class="empty-state">
+                <i class="fa-solid fa-file-lines"></i>
+                <h3>No templates yet</h3>
+                <p>Create a template to start sending personalized messages</p>
+              </div>
+            <% } else { %>
+              <div style="padding: 16px; display:flex; flex-direction:column; gap: 12px;">
+                <% safeTemplates.forEach(template => { %>
+                  <div class="card" style="border-color: <%= editTemplate && editTemplate.id === template.id ? 'var(--primary)' : 'var(--border)' %>;">
+                    <div style="padding: 16px;">
+                      <div class="flex-center" style="justify-content:space-between; margin-bottom: 8px;">
+                        <div>
+                          <h3 style="font-size:14px; font-weight:600;"><%= template.template_name %></h3>
+                          <span class="text-muted text-sm"><%= new Date(template.created_at).toLocaleDateString() %></span>
+                        </div>
+                        <div class="flex gap-8">
+                          <a href="/templates/edit/<%= template.id %>" class="btn btn-outline btn-sm">
+                            <i class="fa-solid fa-pen"></i>
+                          </a>
+                          <button
+                            type="button"
+                            class="btn btn-danger btn-sm js-confirm-delete"
+                            data-confirm-delete-url="/templates/delete/<%= template.id %>"
+                            data-confirm-message="Delete template &quot;<%= template.template_name %>&quot;?"
+                          >
+                            <i class="fa-solid fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="template-preview"><%= template.message || '[Media template without text caption]' %></div>
+                      <% if (template.media_path) { %>
+                        <div class="mt-8 text-sm text-muted">
+                          <span class="badge badge-info" style="margin-right:6px;"><%= (template.media_type || 'document').toUpperCase() %></span>
+                          <i class="fa-solid fa-paperclip"></i>
+                          <%= template.media_name || 'Attached media' %>
+                        </div>
+                      <% } %>
+                      <% if (template.buttons && template.buttons.length > 0) { %>
+                        <div class="mt-8" style="display:flex; flex-wrap:wrap; gap:6px;">
+                          <% template.buttons.forEach(btn => { %>
+                            <a href="<%= btn.url %>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="padding:4px 8px;">
+                              <i class="fa-solid fa-link"></i> <%= btn.label %>
+                            </a>
+                          <% }) %>
+                        </div>
+                      <% } %>
+                    </div>
+                  </div>
+                <% }) %>
+              </div>
+            <% } %>
+          </div>
+        </div>
+
+        <!-- Right: Create/Edit Form -->
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <h2>
+                <% if (editTemplate) { %>
+                  <i class="fa-solid fa-pen" style="color:var(--warning);margin-right:6px;"></i>Edit Template
+                <% } else { %>
+                  <i class="fa-solid fa-plus" style="color:var(--primary);margin-right:6px;"></i>New Template
+                <% } %>
+              </h2>
+            </div>
+            <div class="card-body">
+              <form
+                action="<%= editTemplate ? '/templates/update/' + editTemplate.id : '/templates/create' %>"
+                method="POST"
+                enctype="multipart/form-data"
+              >
+                <div class="form-group">
+                  <label>Template Name</label>
+                  <input
+                    type="text"
+                    name="templateName"
+                    class="form-control"
+                    placeholder="e.g. Order Confirmation"
+                    value="<%= editTemplate ? editTemplate.template_name : '' %>"
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Message</label>
+                  <textarea
+                    id="message"
+                    name="message"
+                    class="form-control"
+                    rows="5"
+                    placeholder="Hello {{name}}, your order {{order_id}} is confirmed!"
+                  ><%= editTemplate ? editTemplate.message : '' %></textarea>
+                  <p class="form-hint">Use <strong>{{variable}}</strong> for dynamic content. Available: {{name}}, {{phone}}</p>
+                </div>
+
+                <div class="form-group">
+                  <label>Attach Media (optional)</label>
+                  <input
+                    type="file"
+                    name="mediaFile"
+                    class="form-control"
+                    accept="image/*,video/*,application/pdf"
+                  />
+                  <p class="form-hint">Supported: images, videos, PDFs (max 25MB). Message text will be used as caption when media is sent.</p>
+                </div>
+
+                <div class="form-group">
+                  <label>Buttons (optional, max 3)</label>
+                  <div style="display:flex; flex-direction:column; gap:8px;">
+                    <% for (let i = 0; i < 3; i++) { %>
+                      <div class="form-row" style="grid-template-columns: 1fr 2fr; gap:8px;">
+                        <input
+                          type="text"
+                          name="buttonLabel"
+                          class="form-control template-btn-label"
+                          placeholder="Button label"
+                          maxlength="30"
+                          value="<%= editButtons[i] ? editButtons[i].label : '' %>"
+                        />
+                        <input
+                          type="url"
+                          name="buttonUrl"
+                          class="form-control template-btn-url"
+                          placeholder="https://example.com"
+                          value="<%= editButtons[i] ? editButtons[i].url : '' %>"
+                        />
+                      </div>
+                    <% } %>
+                  </div>
+                  <p class="form-hint">Buttons are delivered as clickable links in the message body for broad WhatsApp compatibility.</p>
+                </div>
+
+                <% if (editTemplate && editTemplate.media_path) { %>
+                  <div class="alert alert-info text-sm" style="font-size:12px;">
+                    <i class="fa-solid fa-paperclip"></i>
+                    <div>
+                      Existing media: <strong><%= editTemplate.media_name || 'Attached media' %></strong>
+                      (<%= (editTemplate.media_type || 'document').toUpperCase() %>)
+                    </div>
+                  </div>
+                  <div class="form-group" style="margin-top:-6px;">
+                    <label class="flex-center gap-8" style="margin-bottom:0;">
+                      <input type="checkbox" name="removeMedia" value="1" />
+                      <span>Remove existing media</span>
+                    </label>
+                  </div>
+                <% } %>
+
+                <div class="form-group">
+                  <label>Preview</label>
+                  <div class="template-preview" id="templatePreview">
+                    <%= editTemplate ? (editTemplate.message || 'Media template without text caption') : 'Your message preview will appear here...' %>
+                  </div>
+                  <div id="templateButtonsPreview" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">
+                    <% if (editButtons.length > 0) { %>
+                      <% editButtons.forEach(btn => { %>
+                        <span class="btn btn-outline btn-sm" style="padding:4px 8px; cursor:default;">
+                          <i class="fa-solid fa-link"></i> <%= btn.label %>
+                        </span>
+                      <% }) %>
+                    <% } %>
+                  </div>
+                </div>
+
+                <div class="alert alert-info text-sm" style="font-size:12px;">
+                  <i class="fa-solid fa-circle-info"></i>
+                  <div>
+                    <strong>Available variables:</strong> {{name}} (contact name), {{phone}} (contact phone). Provide either message text or a media file.
+                  </div>
+                </div>
+
+                <div class="flex gap-8 mt-8">
+                  <button type="submit" class="btn btn-primary" style="flex:1;">
+                    <% if (editTemplate) { %>
+                      <i class="fa-solid fa-save"></i> Update Template
+                    <% } else { %>
+                      <i class="fa-solid fa-plus"></i> Create Template
+                    <% } %>
+                  </button>
+                  <% if (editTemplate) { %>
+                    <a href="/templates" class="btn btn-outline">Cancel</a>
+                  <% } %>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+</body>
+</html>

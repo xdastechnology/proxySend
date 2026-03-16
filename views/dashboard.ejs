@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="app-layout">
+  <%- include('partials/sidebar') %>
+  <div class="main-content">
+    <%- include('partials/topbar', { pageTitle: 'Dashboard', pageSubtitle: 'Welcome back, ' + user.name + '!' }) %>
+    <% const safeActiveCampaigns = Array.isArray(activeCampaigns) ? activeCampaigns : []; %>
+    <main class="page-content">
+
+      <% if (error) { %>
+        <div class="alert alert-danger" data-auto-dismiss>
+          <i class="fa-solid fa-circle-exclamation"></i> <%= error %>
+        </div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert alert-success" data-auto-dismiss>
+          <i class="fa-solid fa-circle-check"></i> <%= success %>
+        </div>
+      <% } %>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid mb-24">
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon blue">
+              <i class="fa-solid fa-address-book"></i>
+            </div>
+          </div>
+          <h3 id="dashboardTotalContacts"><%= stats.totalContacts.toLocaleString() %></h3>
+          <p>Total Contacts</p>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon green">
+              <i class="fa-solid fa-file-lines"></i>
+            </div>
+          </div>
+          <h3 id="dashboardTotalTemplates"><%= stats.totalTemplates.toLocaleString() %></h3>
+          <p>Templates</p>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon orange">
+              <i class="fa-solid fa-paper-plane"></i>
+            </div>
+          </div>
+          <h3 id="dashboardActiveCampaigns"><%= stats.activeCampaigns.toLocaleString() %></h3>
+          <p>Active Campaigns</p>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon purple">
+              <i class="fa-solid fa-message"></i>
+            </div>
+          </div>
+          <h3 id="dashboardMessagesSent"><%= stats.messagesSent.toLocaleString() %></h3>
+          <p>Messages Sent</p>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon red">
+              <i class="fa-solid fa-coins"></i>
+            </div>
+          </div>
+          <h3 id="dashboardCredits"><%= stats.credits.toLocaleString() %></h3>
+          <p>Credits Remaining</p>
+        </div>
+      </div>
+
+      <div class="card mb-24" id="dashboardRealtimeRoot" data-refresh-ms="4000">
+        <div class="card-header">
+          <div>
+            <h2>Live Campaign Progress</h2>
+            <p class="text-muted text-sm">Auto-updates while campaigns are running</p>
+          </div>
+        </div>
+        <div class="card-body" id="dashboardCampaignProgressList" style="display:flex;flex-direction:column;gap:12px;">
+          <% if (safeActiveCampaigns.length === 0) { %>
+            <div class="empty-state" style="padding:20px;">
+              <i class="fa-solid fa-signal"></i>
+              <h3>No active campaigns</h3>
+              <p>Start a campaign to see live progress here</p>
+            </div>
+          <% } else { %>
+            <% safeActiveCampaigns.forEach(campaign => { %>
+              <% const pct = campaign.total_contacts > 0 ? Math.round((campaign.sent_count / campaign.total_contacts) * 100) : 0; %>
+              <div class="card" style="margin:0;">
+                <div style="padding:14px 16px;">
+                  <div class="flex-center" style="justify-content:space-between; margin-bottom:6px;">
+                    <div>
+                      <div class="fw-600"><%= campaign.campaign_name %></div>
+                      <div class="text-sm text-muted"><%= campaign.template_name || 'No template' %></div>
+                    </div>
+                    <div>
+                      <% if (campaign.status === 'running') { %>
+                        <span class="badge badge-warning"><span class="dot orange"></span> Running</span>
+                      <% } else { %>
+                        <span class="badge badge-secondary"><i class="fa-solid fa-clock"></i> Pending</span>
+                      <% } %>
+                    </div>
+                  </div>
+                  <div class="flex-center" style="justify-content:space-between; margin-bottom:6px;">
+                    <span class="text-sm text-muted"><%= campaign.sent_count %>/<%= campaign.total_contacts %> sent</span>
+                    <span class="text-sm text-muted"><%= campaign.failed_count %> failed</span>
+                  </div>
+                  <div class="progress">
+                    <div class="progress-bar" style="width:<%= pct %>%"></div>
+                  </div>
+                </div>
+              </div>
+            <% }) %>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Quick Actions + WhatsApp Status -->
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Quick Actions</h2>
+              <p>Common tasks to get started</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div style="display:flex; flex-direction:column; gap: 10px;">
+              <a href="/contacts" class="btn btn-outline w-full" style="justify-content:flex-start;">
+                <i class="fa-solid fa-user-plus" style="color:var(--primary);"></i>
+                Add Contacts
+              </a>
+              <a href="/templates" class="btn btn-outline w-full" style="justify-content:flex-start;">
+                <i class="fa-solid fa-file-plus" style="color:var(--success);"></i>
+                Create Template
+              </a>
+              <a href="/campaigns/create" class="btn btn-outline w-full" style="justify-content:flex-start;">
+                <i class="fa-solid fa-rocket" style="color:var(--warning);"></i>
+                Start Campaign
+              </a>
+              <a href="/credits" class="btn btn-outline w-full" style="justify-content:flex-start;">
+                <i class="fa-solid fa-coins" style="color:var(--danger);"></i>
+                View Credits
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>WhatsApp Status</h2>
+              <p>Your WhatsApp connection</p>
+            </div>
+          </div>
+          <div class="card-body" id="dashboardWaStatus" style="text-align:center; padding: 32px 20px;">
+            <% if (connectionStatus === 'connected') { %>
+              <div style="margin-bottom: 16px;">
+                <i class="fa-brands fa-whatsapp" style="font-size:48px; color: var(--success);"></i>
+              </div>
+              <div class="connection-indicator connected" style="display:inline-flex; margin-bottom:16px;">
+                <span class="dot green"></span> Connected
+              </div>
+              <p class="text-muted text-sm mb-16">Your WhatsApp is connected and ready to send messages.</p>
+              <a href="/whatsapp" class="btn btn-outline btn-sm">
+                <i class="fa-solid fa-gear"></i> Manage Connection
+              </a>
+            <% } else { %>
+              <div style="margin-bottom: 16px;">
+                <i class="fa-brands fa-whatsapp" style="font-size:48px; color: var(--text-light);"></i>
+              </div>
+              <div class="connection-indicator disconnected" style="display:inline-flex; margin-bottom:16px;">
+                <span class="dot red"></span> Disconnected
+              </div>
+              <p class="text-muted text-sm mb-16">Connect your WhatsApp account to start sending messages.</p>
+              <a href="/whatsapp/connect" class="btn btn-primary btn-sm">
+                <i class="fa-solid fa-link"></i> Connect WhatsApp
+              </a>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Credits Alert -->
+      <% if (stats.credits === 0) { %>
+        <div class="alert alert-warning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <strong>No credits remaining!</strong> You cannot send messages. Please contact admin to add credits.
+        </div>
+      <% } else if (stats.credits < 20) { %>
+        <div class="alert alert-warning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <strong>Low credits!</strong> You have only <%= stats.credits %> credits remaining. Contact admin to add more.
+        </div>
+      <% } %>
+
+    </main>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+</body>
+</html>

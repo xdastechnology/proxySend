@@ -1,0 +1,57 @@
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon">
+      <i class="fa-brands fa-whatsapp"></i>
+    </div>
+    <div class="brand-text">
+      <h2>ProxySend</h2>
+      <span>Smart Messaging Automation</span>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-label">Main</div>
+    <a href="/dashboard" class="nav-item <%= currentPath === '/dashboard' ? 'active' : '' %>">
+      <i class="fa-solid fa-gauge"></i>
+      Dashboard
+    </a>
+    <a href="/contacts" class="nav-item <%= currentPath.startsWith('/contacts') ? 'active' : '' %>">
+      <i class="fa-solid fa-address-book"></i>
+      Contacts
+    </a>
+    <a href="/templates" class="nav-item <%= currentPath.startsWith('/templates') ? 'active' : '' %>">
+      <i class="fa-solid fa-file-lines"></i>
+      Templates
+    </a>
+    <a href="/campaigns" class="nav-item <%= currentPath.startsWith('/campaigns') ? 'active' : '' %>">
+      <i class="fa-solid fa-paper-plane"></i>
+      Campaigns
+    </a>
+
+    <div class="nav-label">Account</div>
+    <a href="/credits" class="nav-item <%= currentPath === '/credits' ? 'active' : '' %>">
+      <i class="fa-solid fa-coins"></i>
+      Credits
+    </a>
+    <a href="/whatsapp" class="nav-item <%= currentPath.startsWith('/whatsapp') ? 'active' : '' %>">
+      <i class="fa-brands fa-whatsapp"></i>
+      WhatsApp
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="user-info">
+      <div class="user-avatar">
+        <span><%= user && user.name ? user.name.charAt(0).toUpperCase() : 'U' %></span>
+      </div>
+      <div class="user-details">
+        <h4><%= user ? user.name : 'User' %></h4>
+        <span><%= user ? user.email : '' %></span>
+      </div>
+    </div>
+    <a href="/logout" class="btn btn-outline btn-sm w-full">
+      <i class="fa-solid fa-right-from-bracket"></i>
+      Logout
+    </a>
+  </div>
+</aside>

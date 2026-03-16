@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="app-layout">
+  <%- include('partials/sidebar') %>
+  <div class="main-content">
+    <%- include('partials/topbar', { pageTitle: 'WhatsApp Connection', pageSubtitle: 'Manage your WhatsApp account' }) %>
+    <main class="page-content">
+
+      <% if (error) { %>
+        <div class="alert alert-danger" data-auto-dismiss>
+          <i class="fa-solid fa-circle-exclamation"></i> <%= error %>
+        </div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert alert-success" data-auto-dismiss>
+          <i class="fa-solid fa-circle-check"></i> <%= success %>
+        </div>
+      <% } %>
+
+      <div class="two-col">
+        <!-- Connection Status Card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Connection Status</h2>
+          </div>
+          <div class="card-body" style="text-align:center; padding: 40px 24px;">
+            <% if (connectionStatus === 'connected') { %>
+              <i class="fa-brands fa-whatsapp" style="font-size:64px; color:var(--success); margin-bottom:16px; display:block;"></i>
+              <div
+                class="connection-indicator connected"
+                style="display:inline-flex; margin-bottom:20px;"
+                id="connectionStatus"
+              >
+                <span class="dot green"></span> Connected
+              </div>
+              <p class="text-muted mb-24">Your WhatsApp account is connected and ready to send messages.</p>
+              <a
+                href="/whatsapp/disconnect"
+                class="btn btn-danger js-confirm-link"
+                data-confirm-message="Disconnect WhatsApp? This will stop all running campaigns."
+              >
+                <i class="fa-solid fa-link-slash"></i> Disconnect
+              </a>
+            <% } else if (connectionStatus === 'qr_ready' || connectionStatus === 'connecting') { %>
+              <!-- QR Code display -->
+              <div style="margin-bottom: 20px;">
+                <div
+                  class="connection-indicator connecting"
+                  style="display:inline-flex; margin-bottom:16px;"
+                  id="connectionStatus"
+                >
+                  <span class="dot orange"></span> Waiting for scan...
+                </div>
+              </div>
+              <div class="qr-image" id="qrContainer">
+                <% if (qrCode) { %>
+                  <img src="<%= qrCode %>" alt="WhatsApp QR Code" id="qrImage" />
+                <% } else { %>
+                  <div>
+                    <div class="spinner" style="margin: 0 auto 12px;"></div>
+                    <p class="text-muted text-sm">Generating QR code...</p>
+                  </div>
+                <% } %>
+              </div>
+              <p class="text-muted text-sm mt-8" style="max-width: 280px; margin: 8px auto 0;">
+                Open WhatsApp on your phone → Settings → Linked Devices → Link a Device
+              </p>
+            <% } else { %>
+              <!-- Disconnected -->
+              <i class="fa-brands fa-whatsapp" style="font-size:64px; color:var(--text-light); margin-bottom:16px; display:block;"></i>
+              <div
+                class="connection-indicator disconnected"
+                style="display:inline-flex; margin-bottom:20px;"
+                id="connectionStatus"
+              >
+                <span class="dot red"></span> Disconnected
+              </div>
+              <p class="text-muted mb-24">Connect your WhatsApp account to start sending messages.</p>
+              <a href="/whatsapp/connect" class="btn btn-primary">
+                <i class="fa-solid fa-link"></i> Connect WhatsApp
+              </a>
+            <% } %>
+          </div>
+        </div>
+
+        <!-- Instructions Card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>How to Connect</h2>
+          </div>
+          <div class="card-body">
+            <div style="display:flex; flex-direction:column; gap:20px;">
+              <div class="flex-center gap-12" style="align-items:flex-start;">
+                <div style="width:28px;height:28px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <span style="color:white;font-size:12px;font-weight:700;">1</span>
+                </div>
+                <div>
+                  <div class="fw-600 mb-4">Click Connect WhatsApp</div>
+                  <div class="text-muted text-sm">ProxySend will generate a QR code for you to scan</div>
+                </div>
+              </div>
+              <div class="flex-center gap-12" style="align-items:flex-start;">
+                <div style="width:28px;height:28px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <span style="color:white;font-size:12px;font-weight:700;">2</span>
+                </div>
+                <div>
+                  <div class="fw-600 mb-4">Open WhatsApp on Your Phone</div>
+                  <div class="text-muted text-sm">Go to Settings → Linked Devices → Link a Device</div>
+                </div>
+              </div>
+              <div class="flex-center gap-12" style="align-items:flex-start;">
+                <div style="width:28px;height:28px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <span style="color:white;font-size:12px;font-weight:700;">3</span>
+                </div>
+                <div>
+                  <div class="fw-600 mb-4">Scan the QR Code</div>
+                  <div class="text-muted text-sm">Point your camera at the QR code displayed on screen</div>
+                </div>
+              </div>
+              <div class="flex-center gap-12" style="align-items:flex-start;">
+                <div style="width:28px;height:28px;background:var(--success);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <i class="fa-solid fa-check" style="color:white;font-size:12px;"></i>
+                </div>
+                <div>
+                  <div class="fw-600 mb-4">You're Connected!</div>
+                  <div class="text-muted text-sm">Start creating campaigns and sending messages</div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="divider" />
+
+            <div class="alert alert-warning text-sm" style="font-size:12px;">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <div>
+                <strong>Important:</strong> Keep your phone connected to the internet for messages to be sent.
+                Session is saved and persists across restarts.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<% if (connectionStatus === 'qr_ready' || connectionStatus === 'connecting') { %>
+<script>
+  initQRPolling();
+</script>
+<% } %>
+</body>
+</html>

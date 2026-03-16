@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="admin-header">
+    <div class="flex-center gap-12">
+      <i class="fa-solid fa-shield-halved" style="color:#EF4444;"></i>
+      <div>
+        <h1>ProxySend Admin Panel</h1>
+        <span>System Management</span>
+      </div>
+    </div>
+    <a href="/admin/logout" class="btn btn-sm" style="background:#1E3A5F; color:#94A3B8; border:none;">
+      <i class="fa-solid fa-right-from-bracket"></i> Logout
+    </a>
+  </header>
+
+  <div class="admin-layout">
+    <div class="admin-nav">
+      <a href="/admin/dashboard" class="btn btn-primary btn-sm">
+        <i class="fa-solid fa-gauge"></i> Dashboard
+      </a>
+      <a href="/admin/add-credits" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-coins"></i> Add Credits
+      </a>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-danger" data-auto-dismiss>
+        <i class="fa-solid fa-circle-exclamation"></i> <%= error %>
+      </div>
+    <% } %>
+    <% if (success) { %>
+      <div class="alert alert-success" data-auto-dismiss>
+        <i class="fa-solid fa-circle-check"></i> <%= success %>
+      </div>
+    <% } %>
+
+    <!-- Stats -->
+    <div class="stats-grid mb-24" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-card-icon blue"><i class="fa-solid fa-users"></i></div>
+        </div>
+        <h3><%= users.length %></h3>
+        <p>Total Users</p>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-card-icon green"><i class="fa-solid fa-receipt"></i></div>
+        </div>
+        <h3><%= totalTransactions %></h3>
+        <p>Credit Transactions</p>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-card-icon purple"><i class="fa-solid fa-message"></i></div>
+        </div>
+        <h3><%= totalMessages %></h3>
+        <p>Messages Sent</p>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <!-- Users Table -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Registered Users</h2>
+        </div>
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Credits</th>
+                <th>WhatsApp</th>
+                <th>Joined</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (users.length === 0) { %>
+                <tr>
+                  <td colspan="5" style="text-align:center; padding:24px; color:var(--text-secondary);">
+                    No users registered yet
+                  </td>
+                </tr>
+              <% } else { %>
+                <% users.forEach(u => { %>
+                  <tr>
+                    <td class="fw-600"><%= u.name %></td>
+                    <td class="text-muted"><%= u.email %></td>
+                    <td>
+                      <span class="badge <%= u.credits > 0 ? 'badge-success' : 'badge-danger' %>">
+                        <i class="fa-solid fa-coins"></i> <%= u.credits %>
+                      </span>
+                    </td>
+                    <td>
+                      <% if (u.whatsapp_connected) { %>
+                        <span class="badge badge-success"><span class="dot green"></span> Connected</span>
+                      <% } else { %>
+                        <span class="badge badge-secondary"><span class="dot red"></span> Disconnected</span>
+                      <% } %>
+                    </td>
+                    <td class="text-muted text-sm"><%= new Date(u.created_at).toLocaleDateString() %></td>
+                  </tr>
+                <% }) %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent Transactions -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Recent Credit Transactions</h2>
+        </div>
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Credits</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (recentTransactions.length === 0) { %>
+                <tr>
+                  <td colspan="3" style="text-align:center; padding:24px; color:var(--text-secondary);">
+                    No transactions yet
+                  </td>
+                                </tr>
+              <% } else { %>
+                <% recentTransactions.forEach(tx => { %>
+                  <tr>
+                    <td>
+                      <div class="fw-600" style="font-size:13px;"><%= tx.name %></div>
+                      <div class="text-muted text-sm"><%= tx.email %></div>
+                    </td>
+                    <td>
+                      <span class="badge badge-success">
+                        <i class="fa-solid fa-plus"></i> +<%= tx.credits_added %>
+                      </span>
+                    </td>
+                    <td class="text-muted text-sm"><%= new Date(tx.created_at).toLocaleDateString() %></td>
+                  </tr>
+                <% }) %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/js/app.js"></script>
+</body>
+</html>

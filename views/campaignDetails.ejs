@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="app-layout">
+  <%- include('partials/sidebar') %>
+  <div class="main-content">
+    <%- include('partials/topbar', { pageTitle: campaign.campaign_name, pageSubtitle: 'Campaign details and message status' }) %>
+    <main class="page-content">
+
+      <!-- Campaign Summary -->
+      <div class="stats-grid mb-24" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon blue"><i class="fa-solid fa-users"></i></div>
+          </div>
+          <h3><%= campaign.total_contacts %></h3>
+          <p>Total Contacts</p>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon green"><i class="fa-solid fa-circle-check"></i></div>
+          </div>
+          <h3><%= campaign.sent_count %></h3>
+          <p>Sent</p>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon red"><i class="fa-solid fa-circle-xmark"></i></div>
+          </div>
+          <h3><%= campaign.failed_count %></h3>
+          <p>Failed</p>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-header">
+            <div class="stat-card-icon orange"><i class="fa-solid fa-clock"></i></div>
+          </div>
+          <h3><%= campaign.total_contacts - campaign.sent_count - campaign.failed_count %></h3>
+          <p>Pending</p>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <!-- Contact Status Table -->
+        <div class="card" style="grid-column: 1 / -1;">
+          <div class="card-header">
+            <div>
+              <h2>Message Status</h2>
+              <p>Status of each message in this campaign</p>
+            </div>
+            <div class="flex gap-8">
+              <% if (campaign.status === 'pending') { %>
+                <a href="/campaigns/start/<%= campaign.id %>" class="btn btn-success btn-sm">
+                  <i class="fa-solid fa-play"></i> Start Campaign
+                </a>
+              <% } %>
+              <a href="/campaigns" class="btn btn-outline btn-sm">
+                <i class="fa-solid fa-arrow-left"></i> Back
+              </a>
+            </div>
+          </div>
+
+          <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+            <div class="flex-center gap-16">
+              <div>
+                <span class="text-muted text-sm">Template: </span>
+                <strong><%= campaign.template_name %></strong>
+              </div>
+              <div>
+                <span class="text-muted text-sm">Status: </span>
+                <% if (campaign.status === 'completed') { %>
+                  <span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Completed</span>
+                <% } else if (campaign.status === 'running') { %>
+                  <span class="badge badge-warning"><span class="dot orange"></span> Running</span>
+                <% } else { %>
+                  <span class="badge badge-secondary"><i class="fa-solid fa-clock"></i> Pending</span>
+                <% } %>
+              </div>
+              <div>
+                <span class="text-muted text-sm">Created: </span>
+                <strong><%= new Date(campaign.created_at).toLocaleString() %></strong>
+              </div>
+            </div>
+
+            <% const pct = campaign.total_contacts > 0 ? Math.round((campaign.sent_count / campaign.total_contacts) * 100) : 0; %>
+            <div style="margin-top: 12px;">
+              <div class="flex-center" style="justify-content:space-between; margin-bottom:4px;">
+                <span class="text-sm text-muted">Overall Progress</span>
+                <span class="text-sm fw-600"><%= pct %>%</span>
+              </div>
+              <div class="progress" style="height:8px;">
+                <div class="progress-bar <%= campaign.status === 'completed' ? 'success' : '' %>" style="width:<%= pct %>%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Contact</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th>Sent At</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% campaignContacts.forEach((cc, idx) => { %>
+                  <tr>
+                    <td class="text-muted text-sm"><%= idx + 1 %></td>
+                    <td class="fw-600"><%= cc.name %></td>
+                    <td><code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;"><%= cc.phone %></code></td>
+                    <td>
+                      <% if (cc.status === 'sent') { %>
+                        <span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Sent</span>
+                      <% } else if (cc.status === 'failed') { %>
+                        <span class="badge badge-danger"><i class="fa-solid fa-circle-xmark"></i> Failed</span>
+                      <% } else { %>
+                        <span class="badge badge-secondary"><i class="fa-solid fa-clock"></i> Pending</span>
+                      <% } %>
+                    </td>
+                    <td class="text-muted text-sm">
+                      <%= cc.sent_at ? new Date(cc.sent_at).toLocaleString() : '-' %>
+                    </td>
+                    <td class="text-sm text-muted"><%= cc.error_message || '-' %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<% if (campaign.status === 'running') { %>
+<script>
+  // Auto refresh while campaign is running
+  setTimeout(() => window.location.reload(), 10000);
+</script>
+<% } %>
+</body>
+</html>

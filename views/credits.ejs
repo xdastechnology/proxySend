@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="app-layout">
+  <%- include('partials/sidebar') %>
+  <div class="main-content">
+    <%- include('partials/topbar', { pageTitle: 'Credits', pageSubtitle: 'View your credit balance and history' }) %>
+    <main class="page-content">
+
+      <!-- Credit Balance -->
+      <div class="two-col mb-24">
+        <div class="card">
+          <div class="card-body" style="text-align:center; padding: 40px 24px;">
+            <div style="margin-bottom:12px;">
+              <i class="fa-solid fa-coins" style="font-size:48px; color:var(--primary);"></i>
+            </div>
+            <h2 style="font-size:48px; font-weight:700; color:var(--text); margin-bottom:4px;">
+              <%= credits.toLocaleString() %>
+            </h2>
+            <p class="text-muted">Credits Available</p>
+            <div style="margin-top:20px;" class="flex-center gap-8" style="justify-content:center;">
+              <% if (credits === 0) { %>
+                <span class="badge badge-danger" style="font-size:13px; padding: 6px 16px;">
+                  <i class="fa-solid fa-circle-xmark"></i> No Credits
+                </span>
+              <% } else if (credits < 20) { %>
+                <span class="badge badge-warning" style="font-size:13px; padding: 6px 16px;">
+                  <i class="fa-solid fa-triangle-exclamation"></i> Low Balance
+                </span>
+              <% } else { %>
+                <span class="badge badge-success" style="font-size:13px; padding: 6px 16px;">
+                  <i class="fa-solid fa-circle-check"></i> Active
+                </span>
+              <% } %>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>How Credits Work</h2>
+          </div>
+          <div class="card-body">
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div class="flex-center gap-12">
+                <div class="stat-card-icon blue" style="width:36px;height:36px;flex-shrink:0;">
+                  <i class="fa-solid fa-message"></i>
+                </div>
+                <div>
+                  <div class="fw-600" style="font-size:14px;">1 Message = 1 Credit</div>
+                  <div class="text-muted text-sm">Each WhatsApp message sent deducts one credit</div>
+                </div>
+              </div>
+              <div class="flex-center gap-12">
+                <div class="stat-card-icon orange" style="width:36px;height:36px;flex-shrink:0;">
+                  <i class="fa-solid fa-ban"></i>
+                </div>
+                <div>
+                  <div class="fw-600" style="font-size:14px;">Auto-Stop at Zero</div>
+                  <div class="text-muted text-sm">Campaigns stop automatically when credits run out</div>
+                </div>
+              </div>
+              <div class="flex-center gap-12">
+                <div class="stat-card-icon green" style="width:36px;height:36px;flex-shrink:0;">
+                  <i class="fa-solid fa-headset"></i>
+                </div>
+                <div>
+                  <div class="fw-600" style="font-size:14px;">Contact Admin to Top Up</div>
+                  <div class="text-muted text-sm">Credits are added manually by the administrator</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transaction History -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Credit History</h2>
+            <p>Recent credit additions</p>
+          </div>
+        </div>
+        <% if (transactions.length === 0) { %>
+          <div class="empty-state">
+            <i class="fa-solid fa-receipt"></i>
+            <h3>No transactions yet</h3>
+            <p>Credit additions will appear here</p>
+          </div>
+        <% } else { %>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Credits Added</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% transactions.forEach(tx => { %>
+                  <tr>
+                    <td class="text-muted text-sm"><%= new Date(tx.created_at).toLocaleString() %></td>
+                    <td>
+                      <span class="badge badge-success">
+                        <i class="fa-solid fa-plus"></i>
+                        +<%= tx.credits_added.toLocaleString() %> credits
+                      </span>
+                    </td>
+                    <td class="text-muted"><%= tx.admin_note || '-' %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+</body>
+</html>
