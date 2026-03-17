@@ -2,14 +2,20 @@ const { createClient } = require('@libsql/client');
 const path = require('path');
 const fs = require('fs');
 const logger = require('./logger');
+const {
+  getDataDir,
+  getUploadsDir,
+  getTemplateMediaDir,
+  getTemplateTempDir,
+} = require('./runtimePaths');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = getDataDir();
 
 [
   DATA_DIR,
-  path.join(__dirname, '..', 'data', 'uploads'),
-  path.join(__dirname, '..', 'data', 'uploads', 'template-media'),
-  path.join(__dirname, '..', 'data', 'uploads', 'template-temp'),
+  getUploadsDir(),
+  getTemplateMediaDir(),
+  getTemplateTempDir(),
 ].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });

@@ -4,10 +4,11 @@ const multer = require('multer');
 const path = require('path');
 const { requireAuth } = require('../middleware/authMiddleware');
 const contactController = require('../controllers/contactController');
+const { getContactImportDir } = require('../config/runtimePaths');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '..', 'data', 'uploads'));
+    cb(null, getContactImportDir());
   },
   filename: (req, file, cb) => {
     cb(null, `import_${Date.now()}_${file.originalname}`);
@@ -28,7 +29,7 @@ const upload = multer({
 
 // Ensure uploads directory exists
 const fs = require('fs');
-const uploadsDir = path.join(__dirname, '..', 'data', 'uploads');
+const uploadsDir = getContactImportDir();
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }

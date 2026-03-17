@@ -5,8 +5,9 @@ const path = require('path');
 const fs = require('fs');
 const { requireAuth } = require('../middleware/authMiddleware');
 const templateController = require('../controllers/templateController');
+const { getTemplateTempDir } = require('../config/runtimePaths');
 
-const mediaTempDir = path.join(__dirname, '..', 'data', 'uploads', 'template-temp');
+const mediaTempDir = getTemplateTempDir();
 if (!fs.existsSync(mediaTempDir)) {
 	fs.mkdirSync(mediaTempDir, { recursive: true });
 }

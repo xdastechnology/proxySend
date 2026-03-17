@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { getTemplateMediaDir, isServerlessRuntime } = require('../config/runtimePaths');
 
 const ROOT_DIR = path.join(__dirname, '..');
-const LOCAL_MEDIA_DIR = path.join(ROOT_DIR, 'data', 'uploads', 'template-media');
+const LOCAL_MEDIA_DIR = getTemplateMediaDir();
 
 function getStorageMode() {
   return (process.env.MEDIA_STORAGE || 'local').toLowerCase() === 's3' ? 's3' : 'local';
@@ -126,11 +127,13 @@ async function storeUploadedFile(file) {
   const targetPath = path.join(LOCAL_MEDIA_DIR, targetName);
 
   fs.renameSync(file.path, targetPath);
-  const relativePath = path.relative(ROOT_DIR, targetPath).replace(/\\/g, '/');
+  const storedPath = isServerlessRuntime()
+    ? targetPath
+    : path.relative(ROOT_DIR, targetPath).replace(/\\/g, '/');
 
   return {
     ...mediaMeta,
-    mediaPath: `local:${relativePath}`,
+    mediaPath: `local:${storedPath}`,
   };
 }
 
