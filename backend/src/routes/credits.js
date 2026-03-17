@@ -74,16 +74,22 @@ router.post(
         });
       }
 
-      // Get user reference code price
+      // Get user reference code price and seller ownership
       const { rows: userRefRows } = await query(
-        'SELECT rc.inr_per_message FROM users u JOIN reference_codes rc ON rc.id = u.reference_code_id WHERE u.id = $1',
+        `SELECT rc.inr_per_message, u.seller_id
+         FROM users u
+         JOIN reference_codes rc ON rc.id = u.reference_code_id
+         WHERE u.id = $1`,
         [userId]
       );
       const userRef = userRefRows[0];
 
       const { rows: insertRows } = await query(
-        "INSERT INTO credit_requests (user_id, requested_credits, status, note, inr_per_message) VALUES ($1, $2, 'pending', $3, $4) RETURNING id",
-        [userId, requestedCredits, note || null, userRef?.inr_per_message || null]
+        `INSERT INTO credit_requests
+          (user_id, seller_id, requested_credits, status, note, inr_per_message)
+         VALUES ($1, $2, $3, 'pending', $4, $5)
+         RETURNING id`,
+        [userId, userRef?.seller_id || null, requestedCredits, note || null, userRef?.inr_per_message || null]
       );
 
       const { rows } = await query(

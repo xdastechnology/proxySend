@@ -49,6 +49,7 @@ export function StatusBadge({ status }) {
     running: { variant: 'blue', label: 'Running', dot: true },
     completed: { variant: 'green', label: 'Completed' },
     approved: { variant: 'green', label: 'Approved' },
+    confirmed: { variant: 'green', label: 'Confirmed' },
     rejected: { variant: 'red', label: 'Rejected' },
     sent: { variant: 'green', label: 'Sent' },
     failed: { variant: 'red', label: 'Failed' },

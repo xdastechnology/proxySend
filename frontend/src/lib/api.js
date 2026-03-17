@@ -12,7 +12,7 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       const path = window.location.pathname;
-      if (!path.startsWith('/login') && !path.startsWith('/register') && !path.startsWith('/admin')) {
+      if (!path.startsWith('/login') && !path.startsWith('/register') && !path.startsWith('/admin') && !path.startsWith('/seller')) {
         window.location.href = '/login';
       }
     }
@@ -26,8 +26,10 @@ export default api;
 export const authApi = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  sellerLogin: (data) => api.post('/auth/seller/login', data),
   logout: () => api.post('/auth/logout'),
   me: (requestConfig = {}) => api.get('/auth/me', requestConfig),
+  sellerMe: (requestConfig = {}) => api.get('/auth/seller/me', requestConfig),
   adminLogin: (data) => api.post('/auth/admin/login', data),
   adminMe: (requestConfig = {}) => api.get('/auth/admin/me', requestConfig),
 };
@@ -99,9 +101,30 @@ export const creditsApi = {
 export const adminApi = {
   dashboard: () => api.get('/admin/dashboard'),
   users: () => api.get('/admin/users'),
+  sellers: () => api.get('/admin/sellers'),
+  createSeller: (data) => api.post('/admin/sellers', data),
+  toggleSeller: (id) => api.patch(`/admin/sellers/${id}/toggle`),
+  updateSellerCommission: (id, data) => api.patch(`/admin/sellers/${id}/commission`, data),
+  sellerReport: () => api.get('/admin/reports/sellers'),
   addCredits: (data) => api.post('/admin/credits/add', data),
   createRefCode: (data) => api.post('/admin/reference-codes', data),
   toggleRefCode: (id) => api.patch(`/admin/reference-codes/${id}/toggle`),
   creditRequests: (params) => api.get('/admin/credit-requests', { params }),
   resolveCreditRequest: (id, data) => api.patch(`/admin/credit-requests/${id}`, data),
+  sellerSales: (params) => api.get('/admin/seller-sales', { params }),
+  resolveSellerSaleSettlement: (id, data) => api.patch(`/admin/seller-sales/${id}/settlement`, data),
+};
+
+export const sellerApi = {
+  dashboard: (params) => api.get('/seller/dashboard', { params }),
+  customers: (params) => api.get('/seller/customers', { params }),
+  createCustomer: (data) => api.post('/seller/customers', data),
+  toggleCustomer: (id) => api.patch(`/seller/customers/${id}/toggle`),
+  addCustomerCredits: (id, data) => api.post(`/seller/customers/${id}/credits`, data),
+  salesHistory: (params) => api.get('/seller/sales-history', { params }),
+  referenceCodes: () => api.get('/seller/reference-codes'),
+  createReferenceCode: (data) => api.post('/seller/reference-codes', data),
+  toggleReferenceCode: (id) => api.patch(`/seller/reference-codes/${id}/toggle`),
+  creditRequests: (params) => api.get('/seller/credit-requests', { params }),
+  resolveCreditRequest: (id, data) => api.patch(`/seller/credit-requests/${id}`, data),
 };

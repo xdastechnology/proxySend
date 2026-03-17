@@ -26,6 +26,7 @@ const campaignsRoutes = require('./src/routes/campaigns');
 const creditsRoutes = require('./src/routes/credits');
 const sseRoutes = require('./src/routes/sse');
 const adminRoutes = require('./src/routes/admin');
+const sellerRoutes = require('./src/routes/seller');
 
 async function startServer() {
   // Validate required env
@@ -121,6 +122,7 @@ async function startServer() {
   app.use('/api/credits', creditsRoutes);
   app.use('/api/sse', sseRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/seller', sellerRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {

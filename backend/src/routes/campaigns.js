@@ -152,6 +152,12 @@ router.post('/:id/start', async (req, res, next) => {
     const userId = req.session.userId;
     const campaignId = parseInt(req.params.id, 10);
 
+    const { rows: userRows } = await query('SELECT is_active FROM users WHERE id = $1', [userId]);
+    const user = userRows[0];
+    if (!user || !user.is_active) {
+      return res.status(403).json({ error: 'Account is deactivated. Campaign start is blocked.' });
+    }
+
     const { rows } = await query(
       'SELECT * FROM campaigns WHERE id = $1 AND user_id = $2',
       [campaignId, userId]

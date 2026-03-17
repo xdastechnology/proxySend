@@ -64,6 +64,28 @@ async function pauseCampaignForWhatsApp(campaignId, userId) {
   sseService.broadcastToUser(userId, 'campaign_update', updatedCampaign);
 }
 
+async function pauseCampaignForInactiveUser(campaignId, userId) {
+  await query(
+    "UPDATE campaigns SET status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+    [campaignId]
+  );
+
+  const { rows } = await query('SELECT * FROM campaigns WHERE id = $1', [campaignId]);
+  const updatedCampaign = rows[0] || { id: campaignId, status: 'pending' };
+
+  const warning = {
+    campaignId,
+    code: 'account_deactivated',
+    message: 'Customer account is deactivated. Campaign has been paused.',
+  };
+
+  sseService.broadcastToUser(userId, 'campaign_warning', warning);
+  sseService.broadcastToCampaign(campaignId, 'campaign_warning', warning);
+  sseService.broadcastToUser(userId, 'campaign_paused', { campaignId, reason: 'account_deactivated' });
+  sseService.broadcastToCampaign(campaignId, 'campaign_update', updatedCampaign);
+  sseService.broadcastToUser(userId, 'campaign_update', updatedCampaign);
+}
+
 async function runCampaign(campaignId, userId) {
   if (runningCampaigns.has(campaignId)) {
     logger.warn({ campaignId }, 'Campaign already running');
@@ -129,9 +151,25 @@ async function runCampaign(campaignId, userId) {
         break;
       }
 
-      // Check credits
-      const { rows: userRows } = await query('SELECT credits FROM users WHERE id = $1', [userId]);
+      // Check customer status and credits
+      const { rows: userRows } = await query(
+        `SELECT u.credits, u.is_active, u.seller_id,
+                COALESCE(rc.inr_per_message, 0) as inr_per_message,
+                COALESCE(s.commission_pct, 0) as commission_pct
+         FROM users u
+         LEFT JOIN reference_codes rc ON rc.id = u.reference_code_id
+         LEFT JOIN sellers s ON s.id = u.seller_id
+         WHERE u.id = $1`,
+        [userId]
+      );
       const user = userRows[0];
+
+      if (!user || !user.is_active) {
+        logger.warn({ campaignId, userId }, 'Customer account deactivated during campaign, pausing');
+        await pauseCampaignForInactiveUser(campaignId, userId);
+        break;
+      }
+
       if (!user || user.credits < 1) {
         logger.warn({ campaignId, userId }, 'Insufficient credits, stopping campaign');
 
@@ -205,6 +243,12 @@ async function runCampaign(campaignId, userId) {
       const now = new Date().toISOString();
 
       if (sendResult.success) {
+        const pricePerMessage = Number(user.inr_per_message || 0);
+        const commissionPct = Number(user.commission_pct || 0);
+        const grossAmount = pricePerMessage;
+        const adminCommissionAmount = Number((grossAmount * commissionPct).toFixed(6));
+        const sellerNetAmount = Number((grossAmount - adminCommissionAmount).toFixed(6));
+
         // Mark as sent
         await query(
           "UPDATE campaign_contacts SET status = 'sent', sent_at = $1, error_note = NULL WHERE id = $2",
@@ -219,8 +263,19 @@ async function runCampaign(campaignId, userId) {
 
         // Log transaction
         await query(
-          "INSERT INTO credit_transactions (user_id, amount, type, note, campaign_id) VALUES ($1, -1, 'campaign_send', $2, $3)",
-          [userId, `Sent to ${contact.phone} in campaign ${campaign.campaign_name}`, campaignId]
+          `INSERT INTO credit_transactions
+            (user_id, seller_id, amount, type, note, campaign_id, price_per_message, gross_amount, admin_commission_amount, seller_net_amount)
+           VALUES ($1, $2, -1, 'campaign_send', $3, $4, $5, $6, $7, $8)`,
+          [
+            userId,
+            user.seller_id || null,
+            `Sent to ${contact.phone} in campaign ${campaign.campaign_name}`,
+            campaignId,
+            pricePerMessage,
+            grossAmount,
+            adminCommissionAmount,
+            sellerNetAmount,
+          ]
         );
 
         // Log message

@@ -1,4 +1,6 @@
-const { query } = require('./index');
+require('dotenv').config();
+
+const { initDb, getPool, query } = require('./index');
 const logger = require('../utils/logger');
 
 const migrations = [
@@ -186,6 +188,92 @@ const migrations = [
       await query(`CREATE INDEX IF NOT EXISTS idx_templates_user_created_desc ON templates(user_id, created_at DESC)`);
     },
   },
+  {
+    version: 3,
+    name: 'seller_tenancy_and_commission_snapshots',
+    up: async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS sellers (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          phone TEXT,
+          password_hash TEXT NOT NULL,
+          commission_pct REAL NOT NULL DEFAULT 0,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS idx_sellers_active ON sellers(is_active)`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_sellers_created ON sellers(created_at DESC)`);
+
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS seller_id INTEGER REFERENCES sellers(id) ON DELETE SET NULL`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_users_seller_id ON users(seller_id)`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active)`);
+
+      await query(`ALTER TABLE reference_codes ADD COLUMN IF NOT EXISTS seller_id INTEGER REFERENCES sellers(id) ON DELETE SET NULL`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_reference_codes_seller_id ON reference_codes(seller_id)`);
+
+      await query(`ALTER TABLE credit_requests ADD COLUMN IF NOT EXISTS seller_id INTEGER REFERENCES sellers(id) ON DELETE SET NULL`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_credit_requests_seller_status ON credit_requests(seller_id, status, created_at DESC)`);
+
+      await query(`ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS seller_id INTEGER REFERENCES sellers(id) ON DELETE SET NULL`);
+      await query(`ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS price_per_message REAL`);
+      await query(`ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS gross_amount REAL`);
+      await query(`ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS admin_commission_amount REAL`);
+      await query(`ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS seller_net_amount REAL`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_credit_transactions_seller_created ON credit_transactions(seller_id, created_at DESC)`);
+
+      await query(`UPDATE users SET is_active = TRUE WHERE is_active IS NULL`);
+    },
+  },
+  {
+    version: 4,
+    name: 'seller_settlement_requests',
+    up: async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS seller_settlements (
+          id SERIAL PRIMARY KEY,
+          seller_id INTEGER NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
+          from_date DATE NOT NULL,
+          to_date DATE NOT NULL,
+          due_amount REAL NOT NULL DEFAULT 0,
+          paid_amount REAL NOT NULL DEFAULT 0,
+          payment_reference TEXT,
+          note TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          admin_note TEXT,
+          resolved_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CHECK (status IN ('pending', 'confirmed', 'rejected')),
+          CHECK (to_date >= from_date)
+        )
+      `);
+
+      await query(`CREATE INDEX IF NOT EXISTS idx_seller_settlements_seller_created ON seller_settlements(seller_id, created_at DESC)`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_seller_settlements_status_created ON seller_settlements(status, created_at DESC)`);
+    },
+  },
+  {
+    version: 5,
+    name: 'transaction_settlement_status',
+    up: async () => {
+      await query(`ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS settlement_status TEXT NOT NULL DEFAULT 'pending'`);
+      await query(`ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS settled_at TIMESTAMPTZ`);
+      await query(`ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS settlement_note TEXT`);
+
+      await query(`
+        UPDATE credit_transactions
+        SET settlement_status = 'pending'
+        WHERE settlement_status IS NULL
+      `);
+
+      await query(`CREATE INDEX IF NOT EXISTS idx_credit_transactions_seller_settlement_created ON credit_transactions(seller_id, settlement_status, created_at DESC)`);
+    },
+  },
 ];
 
 async function runMigrations() {
@@ -218,3 +306,21 @@ async function runMigrations() {
 }
 
 module.exports = { runMigrations };
+
+if (require.main === module) {
+  (async () => {
+    try {
+      initDb();
+      await runMigrations();
+      logger.info('Migrations completed');
+      await getPool().end();
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err }, 'Migrations failed');
+      try {
+        await getPool().end();
+      } catch {}
+      process.exit(1);
+    }
+  })();
+}

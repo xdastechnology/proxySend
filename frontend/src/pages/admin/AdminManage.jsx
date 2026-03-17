@@ -30,12 +30,31 @@ export default function AdminManage() {
   const [resolveLoading, setResolveLoading] = useState(false);
   const [resolveError, setResolveError] = useState('');
 
+  const [sellerForm, setSellerForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    commissionPct: '0.20',
+  });
+  const [sellerLoading, setSellerLoading] = useState(false);
+  const [sellerError, setSellerError] = useState('');
+  const [commissionDrafts, setCommissionDrafts] = useState({});
+  const [commissionSavingId, setCommissionSavingId] = useState(null);
+  const [sellerReport, setSellerReport] = useState([]);
+  const [sellerSales, setSellerSales] = useState([]);
+  const [settlementResolveLoadingId, setSettlementResolveLoadingId] = useState(null);
+
   const fetchData = useCallback(async () => {
     try {
-      const [dashRes, reqRes] = await Promise.all([
+      const [dashRes, reqRes, reportRes, salesRes] = await Promise.all([
         adminApi.dashboard(),
         adminApi.creditRequests(),
+        adminApi.sellerReport(),
+        adminApi.sellerSales(),
       ]);
+      setSellerReport(reportRes.data.report || []);
+      setSellerSales(salesRes.data.sales || []);
       setData({ ...dashRes.data, allRequests: reqRes.data.requests });
     } finally {
       setLoading(false);
@@ -124,6 +143,91 @@ export default function AdminManage() {
       setResolveError(err.response?.data?.error || 'Failed to resolve request');
     } finally {
       setResolveLoading(false);
+    }
+  };
+
+  const handleCreateSeller = async (e) => {
+    e.preventDefault();
+    setSellerError('');
+    setSellerLoading(true);
+    try {
+      await adminApi.createSeller({
+        name: sellerForm.name,
+        email: sellerForm.email,
+        phone: sellerForm.phone || undefined,
+        password: sellerForm.password,
+        commissionPct: parseFloat(sellerForm.commissionPct),
+      });
+      setSellerForm({
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+        commissionPct: '0.20',
+      });
+      setAlert({ type: 'success', msg: 'Seller created successfully' });
+      fetchData();
+    } catch (err) {
+      setSellerError(err.response?.data?.error || 'Failed to create seller');
+    } finally {
+      setSellerLoading(false);
+    }
+  };
+
+  const handleToggleSeller = async (sellerId) => {
+    try {
+      const res = await adminApi.toggleSeller(sellerId);
+      setAlert({
+        type: 'success',
+        msg: `Seller ${res.data.isActive ? 'activated' : 'deactivated'}${res.data.isActive ? '' : ' (customers disabled)'}`,
+      });
+      fetchData();
+    } catch (err) {
+      setAlert({ type: 'error', msg: err.response?.data?.error || 'Failed to toggle seller' });
+    }
+  };
+
+  const handleSaveCommission = async (sellerId, fallbackPct) => {
+    const raw = commissionDrafts[sellerId];
+    const commissionPct = raw === undefined || raw === '' ? fallbackPct : parseFloat(raw);
+    if (Number.isNaN(commissionPct) || commissionPct < 0 || commissionPct > 1) {
+      setAlert({ type: 'error', msg: 'Commission must be between 0 and 1' });
+      return;
+    }
+
+    setCommissionSavingId(sellerId);
+    try {
+      await adminApi.updateSellerCommission(sellerId, { commissionPct });
+      setAlert({ type: 'success', msg: 'Commission updated' });
+      fetchData();
+    } catch (err) {
+      setAlert({ type: 'error', msg: err.response?.data?.error || 'Failed to update commission' });
+    } finally {
+      setCommissionSavingId(null);
+    }
+  };
+
+  const handleResolveSettlement = async (saleId, action) => {
+    const adminNote = window.prompt(
+      action === 'done'
+        ? 'Optional note for marking this sale as settled:'
+        : 'Optional note for marking this sale as pending:'
+    );
+    setSettlementResolveLoadingId(saleId);
+    try {
+      await adminApi.resolveSellerSaleSettlement(saleId, {
+        action,
+        adminNote: adminNote || undefined,
+      });
+      setAlert({
+        type: 'success',
+        msg: `Sale settlement marked as ${action === 'done' ? 'done' : 'pending'}`,
+      });
+      fetchData();
+    } catch (err) {
+      setAlert({ type: 'error', msg: err.response?.data?.error || 'Failed to update sale settlement' });
+    } finally {
+      setSettlementResolveLoadingId(null);
     }
   };
 
@@ -249,6 +353,240 @@ export default function AdminManage() {
           )}
         </Card>
       </div>
+
+      <div className="grid lg:grid-cols-2 gap-5">
+        <Card>
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-8 h-8 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <Plus className="w-4 h-4 text-emerald-700" />
+            </div>
+            <CardTitle>Create Seller</CardTitle>
+          </div>
+
+          {sellerError && (
+            <Alert type="error" className="mb-4" onDismiss={() => setSellerError('')}>
+              {sellerError}
+            </Alert>
+          )}
+
+          <form onSubmit={handleCreateSeller} className="space-y-4">
+            <Input
+              label="Seller name"
+              required
+              value={sellerForm.name}
+              onChange={(e) => setSellerForm({ ...sellerForm, name: e.target.value })}
+              placeholder="Acme Sales"
+            />
+            <Input
+              label="Seller email"
+              type="email"
+              required
+              value={sellerForm.email}
+              onChange={(e) => setSellerForm({ ...sellerForm, email: e.target.value })}
+              placeholder="seller@example.com"
+            />
+            <Input
+              label="Seller phone"
+              value={sellerForm.phone}
+              onChange={(e) => setSellerForm({ ...sellerForm, phone: e.target.value })}
+              placeholder="+91..."
+            />
+            <Input
+              label="Temporary password"
+              type="password"
+              required
+              value={sellerForm.password}
+              onChange={(e) => setSellerForm({ ...sellerForm, password: e.target.value })}
+              placeholder="Min 8 chars (Aa1...)"
+              hint="Share this securely with the seller"
+            />
+            <Input
+              label="Admin commission (0 to 1)"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              required
+              value={sellerForm.commissionPct}
+              onChange={(e) => setSellerForm({ ...sellerForm, commissionPct: e.target.value })}
+              hint="0.20 means admin gets 20% of spend"
+            />
+            <Button type="submit" fullWidth loading={sellerLoading}>Create Seller</Button>
+          </form>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Sellers</CardTitle>
+            <span className="text-xs text-surface-500">{data?.sellers?.length || 0} total</span>
+          </CardHeader>
+
+          {loading ? (
+            <div className="flex justify-center py-8"><Spinner className="text-brand-500" /></div>
+          ) : !data?.sellers?.length ? (
+            <EmptyState icon={<Tag className="w-6 h-6" />} title="No sellers yet" />
+          ) : (
+            <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
+              {data.sellers.map((s) => (
+                <div key={s.id} className="p-3 bg-surface-50 rounded-xl border border-surface-100">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-surface-800 truncate">{s.name}</p>
+                      <p className="text-xs text-surface-500 truncate">{s.email}</p>
+                      <p className="text-xs text-surface-500 mt-0.5">
+                        {s.customer_count || 0} customer{(s.customer_count || 0) !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleToggleSeller(s.id)}
+                      className={`shrink-0 transition-colors ${s.is_active ? 'text-green-500 hover:text-red-500' : 'text-surface-400 hover:text-green-500'}`}
+                      title={s.is_active ? 'Deactivate seller' : 'Activate seller'}
+                    >
+                      {s.is_active ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-3">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={commissionDrafts[s.id] ?? s.commission_pct}
+                      onChange={(e) => setCommissionDrafts(prev => ({ ...prev, [s.id]: e.target.value }))}
+                      placeholder="0.20"
+                    />
+                    <Button
+                      size="xs"
+                      loading={commissionSavingId === s.id}
+                      onClick={() => handleSaveCommission(s.id, s.commission_pct)}
+                    >
+                      Save
+                    </Button>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-xs">
+                    <span className="text-surface-500">
+                      Gross: <span className="text-surface-700 font-medium">₹{Number(s.gross_sales || 0).toFixed(2)}</span>
+                    </span>
+                    <span className="text-surface-500">
+                      Admin: <span className="text-red-600 font-medium">₹{Number(s.admin_commission || 0).toFixed(2)}</span>
+                    </span>
+                    <span className="text-surface-500">
+                      Net: <span className="text-green-600 font-medium">₹{Number(s.seller_net || 0).toFixed(2)}</span>
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Seller Financial Report</CardTitle>
+          <span className="text-xs text-surface-500">By total gross sales</span>
+        </CardHeader>
+        {loading ? (
+          <div className="flex justify-center py-8"><Spinner className="text-brand-500" /></div>
+        ) : !sellerReport.length ? (
+          <EmptyState icon={<CreditCard className="w-6 h-6" />} title="No seller report data" />
+        ) : (
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-surface-100">
+                  {['Seller', 'Messages', 'Gross', 'Admin Commission', 'Seller Net'].map((h) => (
+                    <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-surface-500 uppercase tracking-wide">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-50">
+                {sellerReport.map((row) => (
+                  <tr key={row.seller_id} className="hover:bg-surface-50 transition-colors">
+                    <td className="px-3 py-3 font-medium text-surface-800">{row.seller_name}</td>
+                    <td className="px-3 py-3 text-surface-700">{Number(row.messages_sold || 0).toLocaleString()}</td>
+                    <td className="px-3 py-3 text-surface-700">₹{Number(row.gross_sales || 0).toFixed(2)}</td>
+                    <td className="px-3 py-3 text-red-600 font-medium">₹{Number(row.admin_commission || 0).toFixed(2)}</td>
+                    <td className="px-3 py-3 text-green-600 font-medium">₹{Number(row.seller_net || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Seller Sales Settlement</CardTitle>
+          <span className="text-xs text-surface-500">Admin marks each sale as settled or pending</span>
+        </CardHeader>
+        {loading ? (
+          <div className="flex justify-center py-8"><Spinner className="text-brand-500" /></div>
+        ) : !sellerSales.length ? (
+          <EmptyState icon={<CreditCard className="w-6 h-6" />} title="No seller sales" />
+        ) : (
+          <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
+            {sellerSales.map((s) => (
+              <div key={s.id} className="p-3 bg-surface-50 rounded-xl border border-surface-100">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-surface-800 truncate">{s.seller_name}</p>
+                    <p className="text-xs text-surface-500 truncate">{s.seller_email}</p>
+                    <p className="text-xs text-surface-500 mt-0.5">
+                      Customer: {s.user_name} ({s.user_email})
+                    </p>
+                    <p className="text-xs text-surface-500 mt-0.5">
+                      Messages: <span className="text-surface-700 font-medium">{Number(s.messages_sold || 0).toLocaleString()}</span>
+                      {' · '}
+                      Gross: <span className="text-surface-700 font-medium">₹{Number(s.gross_amount || 0).toFixed(2)}</span>
+                      {' · '}
+                      Admin: <span className="text-surface-700 font-medium">₹{Number(s.admin_commission_amount || 0).toFixed(2)}</span>
+                    </p>
+                    <p className="text-xs text-surface-500 mt-0.5">
+                      Sale time: {new Date(s.created_at).toLocaleString()}
+                    </p>
+                    {s.settlement_note && (
+                      <p className="text-xs text-surface-500 mt-0.5">Admin note: {s.settlement_note}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    <Badge variant={s.settlement_status === 'done' ? 'green' : 'yellow'} size="sm" dot>
+                      {s.settlement_status === 'done' ? 'Settled' : 'Pending'}
+                    </Badge>
+                    {s.settlement_status === 'pending' ? (
+                      <div className="flex gap-2">
+                        <Button
+                          size="xs"
+                          loading={settlementResolveLoadingId === s.id}
+                          onClick={() => handleResolveSettlement(s.id, 'done')}
+                        >
+                          Mark Done
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button
+                          size="xs"
+                          variant="secondary"
+                          loading={settlementResolveLoadingId === s.id}
+                          onClick={() => handleResolveSettlement(s.id, 'pending')}
+                        >
+                          Mark Pending
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Pending Credit Requests */}
       <Card>

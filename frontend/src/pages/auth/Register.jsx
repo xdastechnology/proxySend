@@ -111,7 +111,7 @@ export default function Register() {
               value={form.referenceCode} onChange={(e) => setForm({ ...form, referenceCode: e.target.value.toUpperCase() })}
               placeholder="PROXYSEND" required
               error={fieldErrors.referenceCode}
-              hint="Ask your referrer for the code"
+              hint="Use an active seller reference code"
             />
 
             <Button type="submit" fullWidth loading={loading} size="lg" className="mt-2">
@@ -125,6 +125,9 @@ export default function Register() {
           <Link to="/login" className="text-brand-600 font-medium hover:underline">
             Sign in
           </Link>
+        </p>
+        <p className="text-center text-xs text-surface-400 mt-2">
+          <Link to="/seller/login" className="hover:text-surface-600">Seller login</Link>
         </p>
       </div>
     </div>
