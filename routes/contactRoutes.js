@@ -38,6 +38,7 @@ router.get('/edit/:id', requireAuth, contactController.getEditContact);
 router.post('/add', requireAuth, contactController.addContact);
 router.post('/update/:id', requireAuth, contactController.updateContact);
 router.post('/import', requireAuth, upload.single('csvFile'), contactController.importContacts);
+router.get('/export', requireAuth, contactController.exportContactsCsv);
 router.get('/delete/:id', requireAuth, contactController.deleteContact);
 router.get('/search', requireAuth, contactController.searchContacts);
 

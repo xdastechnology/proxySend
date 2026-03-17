@@ -1,6 +1,7 @@
 // controllers/authController.js
 const bcrypt = require('bcrypt');
 const UserModel = require('../models/userModel');
+const ReferenceCodeModel = require('../models/referenceCodeModel');
 const logger = require('../config/logger');
 
 const SALT_ROUNDS = 12;
@@ -25,6 +26,12 @@ async function getRegister(req, res) {
     res.render('auth/register', {
       title: 'Register - ProxySend',
       error: req.query.error || null,
+      formData: {
+        name: '',
+        email: '',
+        phone: '',
+        referenceCode: '',
+      },
     });
   } catch (err) {
     logger.error(`getRegister error: ${err.message}`);
@@ -34,22 +41,23 @@ async function getRegister(req, res) {
 
 async function postLogin(req, res) {
   try {
-    const { email, password } = req.body;
+    const identifier = String(req.body.identifier || req.body.email || '').trim();
+    const { password } = req.body;
 
-    if (!email || !password) {
+    if (!identifier || !password) {
       return res.render('auth/login', {
         title: 'Login - ProxySend',
-        error: 'Email and password are required',
+        error: 'Email/phone and password are required',
         success: null,
       });
     }
 
-    const user = await UserModel.findByEmail(email.toLowerCase().trim());
+    const user = await UserModel.findByEmailOrPhone(identifier);
 
     if (!user) {
       return res.render('auth/login', {
         title: 'Login - ProxySend',
-        error: 'Invalid email or password',
+        error: 'Invalid email/phone or password',
         success: null,
       });
     }
@@ -59,7 +67,7 @@ async function postLogin(req, res) {
     if (!passwordMatch) {
       return res.render('auth/login', {
         title: 'Login - ProxySend',
-        error: 'Invalid email or password',
+        error: 'Invalid email/phone or password',
         success: null,
       });
     }
@@ -68,6 +76,7 @@ async function postLogin(req, res) {
       id: user.id,
       name: user.name,
       email: user.email,
+      phone: user.phone,
       credits: user.credits,
     };
 
@@ -87,12 +96,29 @@ async function postLogin(req, res) {
 
 async function postRegister(req, res) {
   try {
-    const { name, email, password, confirmPassword } = req.body;
+    const { name, email, phone, password, confirmPassword, referenceCode } = req.body;
+    const normalizedReferenceCode = ReferenceCodeModel.normalizeCode(referenceCode);
+    const normalizedPhone = UserModel.normalizePhone(phone);
+    const formData = {
+      name: String(name || '').trim(),
+      email: String(email || '').toLowerCase().trim(),
+      phone: normalizedPhone,
+      referenceCode: normalizedReferenceCode,
+    };
 
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name || !email || !normalizedPhone || !password || !confirmPassword || !normalizedReferenceCode) {
       return res.render('auth/register', {
         title: 'Register - ProxySend',
         error: 'All fields are required',
+        formData,
+      });
+    }
+
+    if (normalizedPhone.length < 8 || normalizedPhone.length > 15) {
+      return res.render('auth/register', {
+        title: 'Register - ProxySend',
+        error: 'Please enter a valid phone number',
+        formData,
       });
     }
 
@@ -100,6 +126,7 @@ async function postRegister(req, res) {
       return res.render('auth/register', {
         title: 'Register - ProxySend',
         error: 'Passwords do not match',
+        formData,
       });
     }
 
@@ -107,6 +134,7 @@ async function postRegister(req, res) {
       return res.render('auth/register', {
         title: 'Register - ProxySend',
         error: 'Password must be at least 8 characters',
+        formData,
       });
     }
 
@@ -115,6 +143,25 @@ async function postRegister(req, res) {
       return res.render('auth/register', {
         title: 'Register - ProxySend',
         error: 'Email already registered',
+        formData,
+      });
+    }
+
+    const existingPhoneUser = await UserModel.findByPhone(normalizedPhone);
+    if (existingPhoneUser) {
+      return res.render('auth/register', {
+        title: 'Register - ProxySend',
+        error: 'Phone number already registered',
+        formData,
+      });
+    }
+
+    const referenceCodeRecord = await ReferenceCodeModel.findActiveByCode(normalizedReferenceCode);
+    if (!referenceCodeRecord) {
+      return res.render('auth/register', {
+        title: 'Register - ProxySend',
+        error: 'Invalid or inactive reference code',
+        formData,
       });
     }
 
@@ -122,7 +169,10 @@ async function postRegister(req, res) {
     await UserModel.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
+      phone: normalizedPhone,
       password: hashedPassword,
+      referenceCodeId: referenceCodeRecord.id,
+      referenceCode: referenceCodeRecord.code,
     });
 
     logger.info(`New user registered: ${email}`);

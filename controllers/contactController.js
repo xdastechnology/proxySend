@@ -2,6 +2,10 @@ const ContactModel = require('../models/contactModel');
 const logger = require('../config/logger');
 const fs = require('fs');
 const csv = require('csv-parser');
+const {
+  normalizeIndianPhoneNumber,
+  doesWhatsAppNumberExist,
+} = require('../config/baileys');
 
 function normalizeGender(value) {
   const raw = (value || '').toString().trim().toLowerCase();
@@ -16,6 +20,32 @@ function normalizeEmail(value) {
   if (!email) return null;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email) ? email : null;
+}
+
+async function validateContactWhatsAppNumber(userId, rawPhone) {
+  const normalizedPhone = normalizeIndianPhoneNumber(rawPhone);
+  if (!normalizedPhone) {
+    return { success: false, error: 'Invalid phone number format. Use a valid 10-digit Indian number.' };
+  }
+
+  const verification = await doesWhatsAppNumberExist(userId, normalizedPhone);
+  if (!verification.success) {
+    return { success: false, error: verification.error || 'Failed to verify number on WhatsApp' };
+  }
+
+  if (!verification.exists) {
+    return { success: false, error: 'This phone number is not registered on WhatsApp' };
+  }
+
+  return { success: true, phone: verification.normalizedPhone };
+}
+
+function escapeCsvValue(value) {
+  const str = value == null ? '' : String(value);
+  if (/[,"\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
 }
 
 async function renderContactsPage(req, res, { editContact = null } = {}) {
@@ -72,11 +102,9 @@ async function addContact(req, res) {
       return res.redirect('/contacts?error=Name and phone are required');
     }
 
-    // Sanitize phone number
-    const cleanPhone = phone.replace(/\D/g, '');
-
-    if (cleanPhone.length < 10) {
-      return res.redirect('/contacts?error=Invalid phone number format');
+    const phoneValidation = await validateContactWhatsAppNumber(userId, phone);
+    if (!phoneValidation.success) {
+      return res.redirect(`/contacts?error=${encodeURIComponent(phoneValidation.error)}`);
     }
 
     const cleanEmail = normalizeEmail(email);
@@ -89,7 +117,7 @@ async function addContact(req, res) {
     const result = await ContactModel.create({
       userId,
       name: name.trim(),
-      phone: cleanPhone,
+      phone: phoneValidation.phone,
       email: cleanEmail,
       gender: cleanGender,
     });
@@ -98,7 +126,7 @@ async function addContact(req, res) {
       return res.redirect(`/contacts?error=${encodeURIComponent(result.error)}`);
     }
 
-    logger.info(`Contact added by user ${userId}: ${cleanPhone}`);
+    logger.info(`Contact added by user ${userId}: ${phoneValidation.phone}`);
     res.redirect('/contacts?success=Contact added successfully');
   } catch (err) {
     logger.error(`addContact error: ${err.message}`);
@@ -140,9 +168,9 @@ async function updateContact(req, res) {
       return res.redirect('/contacts?error=Contact not found');
     }
 
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      return res.redirect(`/contacts/edit/${contactId}?error=Invalid phone number format`);
+    const phoneValidation = await validateContactWhatsAppNumber(userId, phone);
+    if (!phoneValidation.success) {
+      return res.redirect(`/contacts/edit/${contactId}?error=${encodeURIComponent(phoneValidation.error)}`);
     }
 
     const cleanEmail = normalizeEmail(email);
@@ -154,7 +182,7 @@ async function updateContact(req, res) {
 
     const result = await ContactModel.update(contactId, userId, {
       name: name.trim(),
-      phone: cleanPhone,
+      phone: phoneValidation.phone,
       email: cleanEmail,
       gender: cleanGender,
     });
@@ -187,11 +215,11 @@ async function importContacts(req, res) {
         .pipe(csv())
         .on('data', (row) => {
           const name = (row.name || row.Name || '').trim();
-          const phone = (row.phone || row.Phone || row.number || '').replace(/\D/g, '');
+          const phone = (row.phone || row.Phone || row.number || '').toString().trim();
           const email = normalizeEmail(row.email || row.Email || row.mail || '');
           const gender = normalizeGender(row.gender || row.Gender || '');
 
-          if (name && phone && phone.length >= 10) {
+          if (name && phone) {
             contacts.push({ name, phone, email, gender });
           }
         })
@@ -206,15 +234,89 @@ async function importContacts(req, res) {
       return res.redirect('/contacts?error=No valid contacts found in CSV');
     }
 
-    const inserted = await ContactModel.bulkInsert(userId, contacts);
+    const validContacts = [];
+    const seenPhones = new Set();
+    let invalidFormatCount = 0;
+    let notOnWhatsAppCount = 0;
+    let duplicateInFileCount = 0;
+
+    for (const contact of contacts) {
+      const phoneValidation = await validateContactWhatsAppNumber(userId, contact.phone);
+      if (!phoneValidation.success) {
+        if ((phoneValidation.error || '').toLowerCase().includes('not connected')) {
+          return res.redirect('/contacts?error=WhatsApp is not connected. Connect WhatsApp before importing contacts');
+        }
+        if ((phoneValidation.error || '').toLowerCase().includes('not registered on whatsapp')) {
+          notOnWhatsAppCount += 1;
+        } else {
+          invalidFormatCount += 1;
+        }
+        continue;
+      }
+
+      if (seenPhones.has(phoneValidation.phone)) {
+        duplicateInFileCount += 1;
+        continue;
+      }
+      seenPhones.add(phoneValidation.phone);
+
+      validContacts.push({
+        ...contact,
+        phone: phoneValidation.phone,
+      });
+    }
+
+    if (validContacts.length === 0) {
+      return res.redirect('/contacts?error=No WhatsApp-valid contacts found in CSV');
+    }
+
+    const inserted = await ContactModel.bulkInsert(userId, validContacts);
+    const duplicateInDatabaseCount = validContacts.length - inserted;
+
     logger.info(`${inserted} contacts imported by user ${userId}`);
-    res.redirect(`/contacts?success=${inserted} contacts imported successfully`);
+
+    const summary = [
+      `${inserted} contacts imported successfully`,
+      invalidFormatCount > 0 ? `${invalidFormatCount} invalid` : null,
+      notOnWhatsAppCount > 0 ? `${notOnWhatsAppCount} not on WhatsApp` : null,
+      duplicateInFileCount > 0 ? `${duplicateInFileCount} duplicates in file` : null,
+      duplicateInDatabaseCount > 0 ? `${duplicateInDatabaseCount} already existed` : null,
+    ].filter(Boolean).join(', ');
+
+    res.redirect(`/contacts?success=${encodeURIComponent(summary)}`);
   } catch (err) {
     logger.error(`importContacts error: ${err.message}`);
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
     res.redirect('/contacts?error=Failed to import contacts');
+  }
+}
+
+async function exportContactsCsv(req, res) {
+  try {
+    const userId = req.session.user.id;
+    const contacts = await ContactModel.findAllByUserId(userId);
+    const safeContacts = Array.isArray(contacts) ? contacts : [];
+
+    const header = ['name', 'phone', 'email', 'gender', 'created_at'];
+    const rows = safeContacts.map((contact) => [
+      escapeCsvValue(contact.name),
+      escapeCsvValue(contact.phone),
+      escapeCsvValue(contact.email || ''),
+      escapeCsvValue(contact.gender || ''),
+      escapeCsvValue(contact.created_at || ''),
+    ].join(','));
+
+    const csvContent = ['\uFEFF' + header.join(','), ...rows].join('\n');
+    const fileName = `contacts_${userId}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.status(200).send(csvContent);
+  } catch (err) {
+    logger.error(`exportContactsCsv error: ${err.message}`);
+    return res.redirect('/contacts?error=Failed to export contacts');
   }
 }
 
@@ -237,5 +339,6 @@ module.exports = {
   updateContact,
   deleteContact,
   importContacts,
+  exportContactsCsv,
   searchContacts,
 };

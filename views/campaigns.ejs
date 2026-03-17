@@ -57,6 +57,7 @@
                   <th>Template</th>
                   <th>Contacts</th>
                   <th>Progress</th>
+                  <th>Credits Used</th>
                   <th>Status</th>
                   <th>Created</th>
                   <th>Actions</th>
@@ -89,6 +90,11 @@
                           style="width:<%= pct %>%"
                         ></div>
                       </div>
+                    </td>
+                    <td>
+                      <span class="badge badge-info" id="campaign-credits-used-<%= campaign.id %>">
+                        <i class="fa-solid fa-coins"></i> <%= Number(campaign.credits_used || campaign.sent_count || 0).toLocaleString() %>
+                      </span>
                     </td>
                     <td>
                       <span id="campaign-status-badge-<%= campaign.id %>">

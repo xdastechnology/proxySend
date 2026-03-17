@@ -638,9 +638,11 @@ function renderCampaignListRealtime(campaigns) {
     const progressText = document.getElementById(`campaign-progress-text-${campaignId}`);
     const progressBar = document.getElementById(`campaign-progress-bar-${campaignId}`);
     const statusBadge = document.getElementById(`campaign-status-badge-${campaignId}`);
+    const creditsUsedBadge = document.getElementById(`campaign-credits-used-${campaignId}`);
 
     const total = Number(campaign.total_contacts || 0);
     const sent = Number(campaign.sent_count || 0);
+    const creditsUsed = Number(campaign.credits_used != null ? campaign.credits_used : sent);
     const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
 
     if (progressText) {
@@ -655,6 +657,10 @@ function renderCampaignListRealtime(campaigns) {
     if (statusBadge) {
       statusBadge.innerHTML = renderCampaignStatusBadge(campaign.status);
     }
+
+    if (creditsUsedBadge) {
+      creditsUsedBadge.innerHTML = `<i class="fa-solid fa-coins"></i> ${formatNumber(creditsUsed)}`;
+    }
   });
 }
 
@@ -665,12 +671,15 @@ function renderCampaignDetailRealtime(campaign, contacts) {
   const sent = Number(campaign.sent_count || 0);
   const failed = Number(campaign.failed_count || 0);
   const pending = Math.max(total - sent - failed, 0);
+  const creditsUsed = Number(campaign.credits_used != null ? campaign.credits_used : sent);
   const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
 
   const statTotal = document.getElementById('campaign-stat-total');
   const statSent = document.getElementById('campaign-stat-sent');
   const statFailed = document.getElementById('campaign-stat-failed');
   const statPending = document.getElementById('campaign-stat-pending');
+  const statCreditsUsed = document.getElementById('campaign-stat-credits-used');
+  const metaCreditsUsed = document.getElementById('campaign-meta-credits-used');
   const pctEl = document.getElementById('campaign-progress-pct');
   const barEl = document.getElementById('campaign-progress-bar');
   const statusWrap = document.getElementById('campaignDetailsStatusBadge');
@@ -679,6 +688,8 @@ function renderCampaignDetailRealtime(campaign, contacts) {
   if (statSent) statSent.textContent = String(sent);
   if (statFailed) statFailed.textContent = String(failed);
   if (statPending) statPending.textContent = String(pending);
+  if (statCreditsUsed) statCreditsUsed.textContent = String(creditsUsed);
+  if (metaCreditsUsed) metaCreditsUsed.textContent = formatNumber(creditsUsed);
   if (pctEl) pctEl.textContent = `${pct}%`;
   if (barEl) {
     barEl.style.width = `${pct}%`;

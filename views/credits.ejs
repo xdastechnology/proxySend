@@ -15,6 +15,17 @@
     <main class="page-content">
       <div id="creditsRealtimeRoot" data-page="credits"></div>
 
+      <% if (error) { %>
+        <div class="alert alert-danger" data-auto-dismiss>
+          <i class="fa-solid fa-circle-exclamation"></i> <%= error %>
+        </div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert alert-success" data-auto-dismiss>
+          <i class="fa-solid fa-circle-check"></i> <%= success %>
+        </div>
+      <% } %>
+
       <!-- Credit Balance -->
       <div class="two-col mb-24">
         <div class="card">
@@ -48,48 +59,112 @@
 
         <div class="card">
           <div class="card-header">
-            <h2>How Credits Work</h2>
+            <h2>Request Credits</h2>
           </div>
           <div class="card-body">
-            <div style="display:flex; flex-direction:column; gap:16px;">
-              <div class="flex-center gap-12">
-                <div class="stat-card-icon blue" style="width:36px;height:36px;flex-shrink:0;">
-                  <i class="fa-solid fa-message"></i>
-                </div>
+            <% if (userReferenceCode && userReferenceCode.code) { %>
+              <div class="alert alert-info" style="margin-bottom:16px;">
                 <div>
-                  <div class="fw-600" style="font-size:14px;">1 Message = 1 Credit</div>
-                  <div class="text-muted text-sm">Each WhatsApp message sent deducts one credit</div>
+                  <div class="fw-600">Reference Code: <%= userReferenceCode.code %></div>
+                  <div class="text-sm text-muted">Price per message: INR <%= Number(userReferenceCode.price_inr || 0).toLocaleString() %></div>
+                  <% if (userReferenceCode.marketing_message) { %>
+                    <div class="text-sm text-muted"><%= userReferenceCode.marketing_message %></div>
+                  <% } %>
                 </div>
               </div>
-              <div class="flex-center gap-12">
-                <div class="stat-card-icon orange" style="width:36px;height:36px;flex-shrink:0;">
-                  <i class="fa-solid fa-ban"></i>
-                </div>
-                <div>
-                  <div class="fw-600" style="font-size:14px;">Auto-Stop at Zero</div>
-                  <div class="text-muted text-sm">Campaigns stop automatically when credits run out</div>
-                </div>
+            <% } %>
+
+            <form action="/credits/request" method="POST">
+              <div class="form-group">
+                <label>Credits Needed</label>
+                <input
+                  type="number"
+                  name="requestedCredits"
+                  class="form-control"
+                  min="1"
+                  max="100000"
+                  placeholder="e.g. 500"
+                  required
+                />
               </div>
-              <div class="flex-center gap-12">
-                <div class="stat-card-icon green" style="width:36px;height:36px;flex-shrink:0;">
-                  <i class="fa-solid fa-headset"></i>
-                </div>
-                <div>
-                  <div class="fw-600" style="font-size:14px;">Contact Admin to Top Up</div>
-                  <div class="text-muted text-sm">Credits are added manually by the administrator</div>
-                </div>
+
+              <div class="form-group">
+                <label>Request Note <span class="text-muted text-sm">(optional)</span></label>
+                <textarea
+                  name="requestNote"
+                  class="form-control"
+                  rows="3"
+                  placeholder="Mention payment details or preferred package"
+                ></textarea>
               </div>
-            </div>
+
+              <button type="submit" class="btn btn-primary btn-full">
+                <i class="fa-solid fa-paper-plane"></i> Send Credit Request
+              </button>
+            </form>
           </div>
         </div>
+      </div>
+
+      <div class="card mb-24">
+        <div class="card-header">
+          <div>
+            <h2>Credit Request History</h2>
+            <p>Track your submitted requests and admin responses</p>
+          </div>
+        </div>
+        <% if (!creditRequests || creditRequests.length === 0) { %>
+          <div class="empty-state">
+            <i class="fa-solid fa-inbox"></i>
+            <h3>No requests yet</h3>
+            <p>Submit a request to see status updates here</p>
+          </div>
+        <% } else { %>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Requested</th>
+                  <th>Approved</th>
+                  <th>Rate</th>
+                  <th>Total INR</th>
+                  <th>Status</th>
+                  <th>Admin Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% creditRequests.forEach(requestItem => { %>
+                  <tr>
+                    <td class="text-muted text-sm"><%= new Date(requestItem.created_at).toLocaleString() %></td>
+                    <td><%= Number(requestItem.requested_credits || 0).toLocaleString() %> credits</td>
+                    <td><%= Number(requestItem.approved_credits || 0).toLocaleString() %> credits</td>
+                    <td class="text-muted text-sm"><%= requestItem.reference_price_per_message ? `INR ${Number(requestItem.reference_price_per_message).toLocaleString()} / msg` : '-' %></td>
+                    <td class="text-muted text-sm"><%= requestItem.price_inr ? `INR ${Number(requestItem.price_inr).toLocaleString()}` : '-' %></td>
+                    <td>
+                      <% if (requestItem.status === 'approved') { %>
+                        <span class="badge badge-success">Approved</span>
+                      <% } else if (requestItem.status === 'rejected') { %>
+                        <span class="badge badge-danger">Rejected</span>
+                      <% } else { %>
+                        <span class="badge badge-warning">Pending</span>
+                      <% } %>
+                    </td>
+                    <td class="text-muted text-sm"><%= requestItem.admin_note || requestItem.request_note || '-' %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
       </div>
 
       <!-- Transaction History -->
       <div class="card">
         <div class="card-header">
           <div>
-            <h2>Credit History</h2>
-            <p>Recent credit additions</p>
+            <h2>Credit Buy History</h2>
+            <p>Recent approved credit additions and pricing data</p>
           </div>
         </div>
         <% if (transactions.length === 0) { %>
@@ -105,6 +180,9 @@
                 <tr>
                   <th>Date</th>
                   <th>Credits Added</th>
+                  <th>Source</th>
+                  <th>INR</th>
+                  <th>Reference</th>
                   <th>Note</th>
                 </tr>
               </thead>
@@ -118,7 +196,63 @@
                         +<%= tx.credits_added.toLocaleString() %> credits
                       </span>
                     </td>
+                    <td class="text-muted text-sm"><%= tx.source || 'admin_manual' %></td>
+                    <td class="text-muted text-sm"><%= tx.inr_amount ? `INR ${Number(tx.inr_amount).toLocaleString()}` : '-' %></td>
+                    <td class="text-muted text-sm"><%= tx.reference_code || '-' %></td>
                     <td class="text-muted"><%= tx.admin_note || '-' %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="card" style="margin-top:24px;">
+        <div class="card-header">
+          <div>
+            <h2>Campaign Credit Usage</h2>
+            <p>How many credits were spent per campaign</p>
+          </div>
+        </div>
+        <% if (!campaignCreditUsage || campaignCreditUsage.length === 0) { %>
+          <div class="empty-state">
+            <i class="fa-solid fa-paper-plane"></i>
+            <h3>No campaign usage yet</h3>
+            <p>Credit usage appears after campaigns start sending messages</p>
+          </div>
+        <% } else { %>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Campaign</th>
+                  <th>Status</th>
+                  <th>Sent</th>
+                  <th>Failed</th>
+                  <th>Credits Used</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% campaignCreditUsage.forEach(item => { %>
+                  <tr>
+                    <td>
+                      <a href="/campaigns/details/<%= item.id %>" style="font-weight:600;color:var(--text);"><%= item.campaign_name %></a>
+                    </td>
+                    <td>
+                      <% if (item.status === 'completed') { %>
+                        <span class="badge badge-success">Completed</span>
+                      <% } else if (item.status === 'running') { %>
+                        <span class="badge badge-warning">Running</span>
+                      <% } else { %>
+                        <span class="badge badge-secondary">Pending</span>
+                      <% } %>
+                    </td>
+                    <td><%= Number(item.sent_count || 0).toLocaleString() %></td>
+                    <td><%= Number(item.failed_count || 0).toLocaleString() %></td>
+                    <td><span class="badge badge-info"><%= Number(item.credits_used || 0).toLocaleString() %></span></td>
+                    <td class="text-muted text-sm"><%= new Date(item.created_at).toLocaleDateString() %></td>
                   </tr>
                 <% }) %>
               </tbody>

@@ -3,18 +3,56 @@ const { dbRun, dbGet, dbAll } = require('../config/database');
 const { publishUserUpdate, publishAdminUpdate } = require('../services/realtimeService');
 
 class UserModel {
+  static normalizePhone(phone) {
+    return String(phone || '').replace(/\D/g, '');
+  }
+
   static async findByEmail(email) {
     return await dbGet('SELECT * FROM users WHERE email = ?', [email]);
+  }
+
+  static async findByPhone(phone) {
+    const normalizedPhone = this.normalizePhone(phone);
+    if (!normalizedPhone) return null;
+    return dbGet('SELECT * FROM users WHERE phone = ?', [normalizedPhone]);
+  }
+
+  static async findByEmailOrPhone(identifier) {
+    const raw = String(identifier || '').trim();
+    if (!raw) return null;
+
+    const normalizedEmail = raw.toLowerCase();
+    if (normalizedEmail.includes('@')) {
+      return this.findByEmail(normalizedEmail);
+    }
+
+    return this.findByPhone(raw);
   }
 
   static async findById(id) {
     return await dbGet('SELECT * FROM users WHERE id = ?', [id]);
   }
 
-  static async create({ name, email, password }) {
+  static async create({
+    name,
+    email,
+    phone,
+    password,
+    referenceCodeId = null,
+    referenceCode = null,
+  }) {
+    const normalizedPhone = this.normalizePhone(phone);
     const result = await dbRun(
-      'INSERT INTO users (name, email, password, credits) VALUES (?, ?, ?, 0)',
-      [name, email, password]
+      `INSERT INTO users (
+        name,
+        email,
+        phone,
+        password,
+        credits,
+        reference_code_id,
+        reference_code
+      ) VALUES (?, ?, ?, ?, 0, ?, ?)`,
+      [name, email, normalizedPhone, password, referenceCodeId, referenceCode]
     );
     return result.lastID;
   }
@@ -63,7 +101,20 @@ class UserModel {
 
   static async getAllUsers() {
     return await dbAll(
-      'SELECT id, name, email, credits, whatsapp_connected, created_at FROM users ORDER BY created_at DESC'
+      `SELECT u.id,
+              u.name,
+              u.email,
+              u.phone,
+              u.credits,
+              u.whatsapp_connected,
+              u.created_at,
+              u.reference_code,
+              rc.price_inr as reference_price_inr,
+              rc.marketing_message as reference_message,
+              rc.code as reference_code_active
+       FROM users u
+       LEFT JOIN reference_codes rc ON rc.id = u.reference_code_id
+       ORDER BY u.created_at DESC`
     );
   }
 

@@ -43,7 +43,7 @@
         <i class="fa-solid fa-gauge"></i> Dashboard
       </a>
       <a href="/admin/add-credits" class="btn btn-primary btn-sm">
-        <i class="fa-solid fa-coins"></i> Add Credits
+        <i class="fa-solid fa-coins"></i> Credits, Codes & Requests
       </a>
     </div>
 
@@ -75,7 +75,7 @@
                 <option value="">-- Select a user --</option>
                 <% users.forEach(u => { %>
                   <option value="<%= u.email %>" data-credits="<%= u.credits %>" data-user-id="<%= u.id %>">
-                    <%= u.name %> (<%= u.email %>) — <%= u.credits %> credits
+                    <%= u.name %> (<%= u.email %><%= u.phone ? ` | ${u.phone}` : '' %>) — <%= u.credits %> credits
                   </option>
                 <% }) %>
               </select>
@@ -135,6 +135,8 @@
             <thead>
               <tr>
                 <th>User</th>
+                <th>Phone</th>
+                <th>Reference Code</th>
                 <th>Current Credits</th>
                 <th>Status</th>
               </tr>
@@ -142,7 +144,7 @@
             <tbody>
               <% if (users.length === 0) { %>
                 <tr>
-                  <td colspan="3" style="text-align:center; padding:24px; color:var(--text-secondary);">
+                  <td colspan="5" style="text-align:center; padding:24px; color:var(--text-secondary);">
                     No users found
                   </td>
                 </tr>
@@ -152,6 +154,14 @@
                     <td>
                       <div class="fw-600" style="font-size:13px;"><%= u.name %></div>
                       <div class="text-muted text-sm"><%= u.email %></div>
+                    </td>
+                    <td class="text-muted text-sm"><%= u.phone || '-' %></td>
+                    <td>
+                      <% if (u.reference_code || u.reference_code_active) { %>
+                        <span class="badge badge-info"><%= u.reference_code_active || u.reference_code %></span>
+                      <% } else { %>
+                        <span class="text-muted text-sm">-</span>
+                      <% } %>
                     </td>
                     <td>
                       <span class="fw-600" id="admin-add-user-credits-<%= u.id %>"><%= u.credits.toLocaleString() %></span>
@@ -172,6 +182,187 @@
           </table>
         </div>
       </div>
+    </div>
+
+    <div class="two-col" style="margin-top:24px;">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2><i class="fa-solid fa-tags" style="color:var(--primary);margin-right:6px;"></i>Create Reference Code</h2>
+            <p>Set INR per message and message shown for this reference code</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <form action="/admin/reference-codes" method="POST">
+            <div class="form-group">
+              <label>Reference Code</label>
+              <input
+                type="text"
+                name="code"
+                class="form-control"
+                placeholder="e.g. PRO100"
+                maxlength="32"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Price Per Message (INR)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                name="priceInr"
+                class="form-control"
+                placeholder="e.g. 0.45"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Message <span class="text-muted text-sm">(optional)</span></label>
+              <textarea
+                name="marketingMessage"
+                class="form-control"
+                rows="3"
+                placeholder="e.g. 1000 credits starter pack"
+              ></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-full">
+              <i class="fa-solid fa-plus"></i> Create Reference Code
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Reference Code Analytics</h2>
+        </div>
+        <% if (!referenceCodes || referenceCodes.length === 0) { %>
+          <div class="empty-state" style="padding:20px;">
+            <i class="fa-solid fa-tags"></i>
+            <h3>No reference codes yet</h3>
+            <p>Create one to enable registrations</p>
+          </div>
+        <% } else { %>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>INR / Message</th>
+                  <th>Users</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% referenceCodes.forEach(rc => { %>
+                  <tr>
+                    <td>
+                      <div class="fw-600"><%= rc.code %></div>
+                      <div class="text-muted text-sm"><%= rc.marketing_message || '-' %></div>
+                    </td>
+                    <td class="fw-600">INR <%= Number(rc.price_inr || 0).toLocaleString() %></td>
+                    <td><span class="badge badge-info"><%= Number(rc.users_count || 0) %> users</span></td>
+                    <td>
+                      <% if (rc.is_active) { %>
+                        <span class="badge badge-success">Active</span>
+                      <% } else { %>
+                        <span class="badge badge-secondary">Inactive</span>
+                      <% } %>
+                    </td>
+                    <td>
+                      <form action="/admin/reference-codes/<%= rc.id %>/toggle" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-outline btn-sm">
+                          <i class="fa-solid fa-power-off"></i>
+                          <%= rc.is_active ? 'Deactivate' : 'Activate' %>
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px;">
+      <div class="card-header">
+        <div>
+          <h2>Pending Credit Requests</h2>
+          <p>Review and approve or reject user credit purchase requests</p>
+        </div>
+      </div>
+      <% if (!pendingCreditRequests || pendingCreditRequests.length === 0) { %>
+        <div class="empty-state" style="padding:24px;">
+          <i class="fa-solid fa-inbox"></i>
+          <h3>No pending requests</h3>
+          <p>New credit requests will appear here</p>
+        </div>
+      <% } else { %>
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Requested</th>
+                <th>Reference</th>
+                <th>Rate</th>
+                <th>Total INR</th>
+                <th>Note</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% pendingCreditRequests.forEach(reqItem => { %>
+                <tr>
+                  <td>
+                    <div class="fw-600" style="font-size:13px;"><%= reqItem.name %></div>
+                    <div class="text-muted text-sm"><%= reqItem.email %></div>
+                    <div class="text-muted text-sm"><%= new Date(reqItem.created_at).toLocaleString() %></div>
+                  </td>
+                  <td><span class="badge badge-warning"><%= Number(reqItem.requested_credits || 0).toLocaleString() %> credits</span></td>
+                  <td><%= reqItem.reference_code || '-' %></td>
+                  <td><%= reqItem.reference_price_per_message ? `INR ${Number(reqItem.reference_price_per_message).toLocaleString()} / msg` : '-' %></td>
+                  <td><%= reqItem.price_inr ? `INR ${Number(reqItem.price_inr).toLocaleString()}` : '-' %></td>
+                  <td class="text-muted text-sm"><%= reqItem.request_note || '-' %></td>
+                  <td>
+                    <form action="/admin/credit-requests/<%= reqItem.id %>/review" method="POST" style="display:flex; flex-direction:column; gap:8px; min-width:210px;">
+                      <input
+                        type="number"
+                        name="approvedCredits"
+                        class="form-control"
+                        min="1"
+                        value="<%= reqItem.requested_credits %>"
+                        placeholder="Approved credits"
+                      />
+                      <input
+                        type="text"
+                        name="adminNote"
+                        class="form-control"
+                        placeholder="Admin note"
+                      />
+                      <div class="flex gap-8">
+                        <button type="submit" name="action" value="approve" class="btn btn-success btn-sm">
+                          <i class="fa-solid fa-check"></i> Approve
+                        </button>
+                        <button type="submit" name="action" value="reject" class="btn btn-danger btn-sm">
+                          <i class="fa-solid fa-xmark"></i> Reject
+                        </button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
     </div>
   </div>
 

@@ -158,6 +158,70 @@ function getConnectionStatus(userId) {
   return connectionStatus.get(userId) || 'disconnected';
 }
 
+function normalizeIndianPhoneNumber(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return null;
+
+  const withCountryCode = digits.startsWith('91') ? digits : `91${digits}`;
+  if (!/^91\d{10}$/.test(withCountryCode)) {
+    return null;
+  }
+
+  return withCountryCode;
+}
+
+async function doesWhatsAppNumberExist(userId, phone) {
+  const normalizedPhone = normalizeIndianPhoneNumber(phone);
+  if (!normalizedPhone) {
+    return {
+      success: false,
+      exists: false,
+      normalizedPhone: null,
+      error: 'Invalid phone number format',
+    };
+  }
+
+  const isConnected = await ensureConnectedSocket(userId, 5000);
+  if (!isConnected) {
+    return {
+      success: false,
+      exists: false,
+      normalizedPhone,
+      error: 'WhatsApp is not connected. Please connect WhatsApp first.',
+    };
+  }
+
+  const sock = activeSockets.get(userId);
+  if (!sock) {
+    return {
+      success: false,
+      exists: false,
+      normalizedPhone,
+      error: 'WhatsApp is not connected. Please connect WhatsApp first.',
+    };
+  }
+
+  try {
+    const lookup = await sock.onWhatsApp(`${normalizedPhone}@s.whatsapp.net`);
+    const exists = Array.isArray(lookup) && lookup[0] && lookup[0].exists === true;
+
+    return {
+      success: true,
+      exists,
+      normalizedPhone,
+      error: null,
+    };
+  } catch (err) {
+    logger.error(`WhatsApp number check failed for user ${userId}: ${err.message}`);
+    return {
+      success: false,
+      exists: false,
+      normalizedPhone,
+      error: 'Failed to verify phone number on WhatsApp',
+    };
+  }
+}
+
 async function disconnectSocket(userId) {
   const sock = activeSockets.get(userId);
   if (sock) {
@@ -206,5 +270,7 @@ module.exports = {
   disconnectSocket,
   sendTextMessage,
   sendWhatsAppMessage,
+  normalizeIndianPhoneNumber,
+  doesWhatsAppNumberExist,
   activeSockets,
 };

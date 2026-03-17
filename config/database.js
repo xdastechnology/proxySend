@@ -167,6 +167,48 @@ async function ensureTemplateColumns() {
   }
 }
 
+async function ensureUserColumns() {
+  const columns = await dbAll('PRAGMA table_info(users)');
+  const names = new Set(columns.map((col) => col.name));
+
+  if (!names.has('phone')) {
+    await dbRun('ALTER TABLE users ADD COLUMN phone TEXT');
+  }
+
+  if (!names.has('reference_code_id')) {
+    await dbRun('ALTER TABLE users ADD COLUMN reference_code_id INTEGER');
+  }
+
+  if (!names.has('reference_code')) {
+    await dbRun('ALTER TABLE users ADD COLUMN reference_code TEXT');
+  }
+}
+
+async function ensureCreditTransactionColumns() {
+  const columns = await dbAll('PRAGMA table_info(credit_transactions)');
+  const names = new Set(columns.map((col) => col.name));
+
+  if (!names.has('source')) {
+    await dbRun("ALTER TABLE credit_transactions ADD COLUMN source TEXT DEFAULT 'admin_manual'");
+  }
+
+  if (!names.has('request_id')) {
+    await dbRun('ALTER TABLE credit_transactions ADD COLUMN request_id INTEGER');
+  }
+
+  if (!names.has('inr_amount')) {
+    await dbRun('ALTER TABLE credit_transactions ADD COLUMN inr_amount REAL');
+  }
+
+  if (!names.has('reference_code_id')) {
+    await dbRun('ALTER TABLE credit_transactions ADD COLUMN reference_code_id INTEGER');
+  }
+
+  await dbRun(
+    "UPDATE credit_transactions SET source = 'admin_manual' WHERE source IS NULL OR TRIM(source) = ''"
+  );
+}
+
 async function initializeDatabase() {
   logger.info('Initializing database...');
 
@@ -177,9 +219,25 @@ async function initializeDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
+      phone TEXT,
       password TEXT NOT NULL,
       credits INTEGER DEFAULT 0,
       whatsapp_connected INTEGER DEFAULT 0,
+      reference_code_id INTEGER,
+      reference_code TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await ensureUserColumns();
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS reference_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      price_inr REAL NOT NULL,
+      marketing_message TEXT,
+      is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -255,7 +313,31 @@ async function initializeDatabase() {
       user_id INTEGER NOT NULL,
       credits_added INTEGER NOT NULL,
       admin_note TEXT,
+      source TEXT DEFAULT 'admin_manual',
+      request_id INTEGER,
+      inr_amount REAL,
+      reference_code_id INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await ensureCreditTransactionColumns();
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS credit_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      requested_credits INTEGER NOT NULL,
+      request_note TEXT,
+      status TEXT DEFAULT 'pending',
+      admin_note TEXT,
+      approved_credits INTEGER DEFAULT 0,
+      reference_code_id INTEGER,
+      price_inr REAL,
+      resolved_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
@@ -310,6 +392,13 @@ async function initializeDatabase() {
   );
 
   await dbRun('CREATE INDEX IF NOT EXISTS idx_app_sessions_expires ON app_sessions(expires_at)');
+  await dbRun('CREATE INDEX IF NOT EXISTS idx_reference_codes_code ON reference_codes(code)');
+  await dbRun('CREATE INDEX IF NOT EXISTS idx_users_reference_code ON users(reference_code_id)');
+  await dbRun(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique ON users(phone) WHERE phone IS NOT NULL AND TRIM(phone) <> ''"
+  );
+  await dbRun('CREATE INDEX IF NOT EXISTS idx_credit_requests_user ON credit_requests(user_id, created_at DESC)');
+  await dbRun('CREATE INDEX IF NOT EXISTS idx_credit_requests_status ON credit_requests(status, created_at DESC)');
 
   logger.info('Database initialized successfully');
 }
