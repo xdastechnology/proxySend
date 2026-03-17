@@ -20,6 +20,9 @@ const realtimeRoutes = require('./routes/realtimeRoutes');
 const { normalizeStaleRunningCampaigns } = require('./services/campaignService');
 
 const app = express();
+const isVercelRuntime = String(process.env.VERCEL || '').toLowerCase() === '1'
+  || String(process.env.VERCEL || '').toLowerCase() === 'true';
+let appBootstrapPromise;
 
 function validateEnvironment() {
   const required = [
@@ -37,6 +40,17 @@ function validateEnvironment() {
 }
 
 validateEnvironment();
+
+async function bootstrapApplication() {
+  if (!appBootstrapPromise) {
+    appBootstrapPromise = (async () => {
+      await initializeDatabase();
+      await normalizeStaleRunningCampaigns();
+    })();
+  }
+
+  return appBootstrapPromise;
+}
 
 // Security middleware
 app.use(
@@ -87,6 +101,22 @@ app.use((req, res, next) => {
   next();
 });
 
+if (isVercelRuntime) {
+  app.use(async (req, res, next) => {
+    try {
+      await bootstrapApplication();
+      next();
+    } catch (err) {
+      logger.error(`Bootstrap failed in Vercel runtime: ${err.message}`);
+      res.status(500).render('error', {
+        title: '500 - Server Error',
+        message: 'Failed to initialize server resources.',
+        code: 500,
+      });
+    }
+  });
+}
+
 // Routes
 app.use('/', authRoutes);
 app.use('/dashboard', dashboardRoutes);
@@ -119,18 +149,19 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
-async function startServer() {
-  await initializeDatabase();
-  await normalizeStaleRunningCampaigns();
+async function startHttpServer() {
+  await bootstrapApplication();
   app.listen(PORT, () => {
     logger.info(`ProxySend running on http://localhost:${PORT}`);
     logger.info(`Admin panel: http://localhost:${PORT}/admin/login`);
   });
 }
 
-startServer().catch((err) => {
-  logger.error(`Failed to start server: ${err.message}`);
-  process.exit(1);
-});
+if (!isVercelRuntime) {
+  startHttpServer().catch((err) => {
+    logger.error(`Failed to start server: ${err.message}`);
+    process.exit(1);
+  });
+}
 
 module.exports = app;
