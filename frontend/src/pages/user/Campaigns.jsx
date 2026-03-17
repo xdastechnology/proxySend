@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Megaphone, Plus, Play, Trash2, ArrowRight, Search } from 'lucide-react';
 import { campaignsApi, templatesApi, contactsApi } from '../../lib/api';
+import { useSSE } from '../../hooks/useSSE';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -19,6 +20,7 @@ export default function Campaigns() {
   const [formOpen, setFormOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [openingForm, setOpeningForm] = useState(false);
   const [page, setPage] = useState(1);
 
   const [templates, setTemplates] = useState([]);
@@ -28,6 +30,7 @@ export default function Campaigns() {
   const [form, setForm] = useState({ campaignName: '', templateId: '' });
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+  const [formResourcesLoading, setFormResourcesLoading] = useState(false);
 
   const fetchCampaigns = async (p = 1) => {
     setLoading(true);
@@ -39,21 +42,64 @@ export default function Campaigns() {
       setLoading(false);
     }
   };
-
   useEffect(() => { fetchCampaigns(page); }, [page]);
 
+  useSSE('/api/sse/user', {
+    events: {
+      campaign_update: (data) => {
+        setCampaigns((prev) =>
+          prev.map((c) => (c.id === data.id ? { ...c, ...data } : c))
+        );
+      },
+      campaign_warning: (data) => {
+        if (data?.code === 'whatsapp_not_connected') {
+          setAlert({ type: 'warning', msg: data.message || 'WhatsApp is not connected.' });
+        }
+      },
+    },
+  });
+
+  const loadCreateResources = async () => {
+    setFormResourcesLoading(true);
+    try {
+      const [tmplRes, ctRes] = await Promise.allSettled([
+        templatesApi.list(),
+        contactsApi.picker({ limit: 500 }),
+      ]);
+
+      if (tmplRes.status === 'fulfilled') {
+        setTemplates(tmplRes.value.data.templates || []);
+      } else {
+        setTemplates([]);
+        setAlert({ type: 'error', msg: tmplRes.reason?.response?.data?.error || 'Failed to load templates' });
+      }
+
+      if (ctRes.status === 'fulfilled') {
+        setContacts(ctRes.value.data.contacts || []);
+      } else {
+        setContacts([]);
+        setAlert({ type: 'error', msg: ctRes.reason?.response?.data?.error || 'Failed to load contacts (request timed out)' });
+      }
+    } finally {
+      setFormResourcesLoading(false);
+    }
+  };
+
   const openCreate = async () => {
-    setForm({ campaignName: '', templateId: '' });
-    setSelectedContacts([]);
-    setContactSearch('');
-    setFormError('');
-    const [tmplRes, ctRes] = await Promise.all([
-      templatesApi.list(),
-      contactsApi.list({ limit: 100 }),
-    ]);
-    setTemplates(tmplRes.data.templates);
-    setContacts(ctRes.data.contacts);
-    setFormOpen(true);
+    try {
+      setOpeningForm(true);
+      setForm({ campaignName: '', templateId: '' });
+      setSelectedContacts([]);
+      setContactSearch('');
+      setFormError('');
+      setFormOpen(true);
+      await loadCreateResources();
+    } catch (err) {
+      setAlert({ type: 'error', msg: err.response?.data?.error || 'Failed to load templates or contacts for new campaign' });
+      console.error(err);
+    } finally {
+      setOpeningForm(false);
+    }
   };
 
   const filteredContacts = contacts.filter(c =>
@@ -71,6 +117,7 @@ export default function Campaigns() {
   const handleCreate = async (e) => {
     e.preventDefault();
     setFormError('');
+    if (formResourcesLoading) return setFormError('Please wait, still loading templates and contacts');
     if (!form.campaignName.trim()) return setFormError('Campaign name required');
     if (!form.templateId) return setFormError('Please select a template');
     if (!selectedContacts.length) return setFormError('Select at least one contact');
@@ -129,7 +176,7 @@ export default function Campaigns() {
             <CardTitle>Campaigns</CardTitle>
             <p className="text-xs text-surface-500 mt-0.5">{pagination.total} total</p>
           </div>
-          <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={openCreate}>
+          <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={openCreate} loading={openingForm}>
             New Campaign
           </Button>
         </CardHeader>
@@ -142,7 +189,7 @@ export default function Campaigns() {
             icon={<Megaphone className="w-8 h-8" />}
             title="No campaigns yet"
             description="Create a campaign to start sending messages to your contacts"
-            action={<Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={openCreate}>New Campaign</Button>}
+            action={<Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={openCreate} loading={openingForm}>New Campaign</Button>}
           />
         ) : (
           <div className="space-y-3">
@@ -249,6 +296,9 @@ export default function Campaigns() {
                 Contacts <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center gap-2">
+                <Button type="button" size="xs" variant="secondary" onClick={loadCreateResources} loading={formResourcesLoading}>
+                  Reload
+                </Button>
                 <span className="text-xs text-surface-500">{selectedContacts.length} selected</span>
                 <button
                   type="button"

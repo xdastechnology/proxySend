@@ -42,6 +42,17 @@ export default function CampaignDetail() {
     onPoll: fetchDetail,
   }, { enabled: campaign?.status === 'running' || campaign?.status === 'pending' });
 
+  useSSE('/api/sse/user', {
+    events: {
+      campaign_warning: (data) => {
+        if (String(data?.campaignId) !== String(id)) return;
+        if (data?.code === 'whatsapp_not_connected') {
+          setAlert({ type: 'warning', msg: data.message || 'WhatsApp is not connected.' });
+        }
+      },
+    },
+  });
+
   // Also refresh contact statuses periodically when running
   useEffect(() => {
     if (campaign?.status !== 'running') return;

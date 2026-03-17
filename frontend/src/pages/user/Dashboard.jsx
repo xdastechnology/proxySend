@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, FileText, Megaphone, CreditCard, Wifi, ArrowRight, TrendingUp, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSSE } from '../../hooks/useSSE';
 import { contactsApi, templatesApi, campaignsApi, creditsApi } from '../../lib/api';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/Badge';
@@ -75,6 +76,16 @@ export default function Dashboard() {
     }
     fetchData();
   }, []);
+
+  useSSE('/api/sse/user', {
+    events: {
+      campaign_update: (data) => {
+        setRecentCampaigns((prev) =>
+          prev.map((c) => (c.id === data.id ? { ...c, ...data } : c))
+        );
+      },
+    },
+  });
 
   const waStatusConfig = {
     connected: { color: 'text-green-600', bg: 'bg-green-50 border-green-200', label: 'Connected & Ready' },

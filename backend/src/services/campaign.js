@@ -42,6 +42,28 @@ async function normalizeStaleCampaigns() {
   }
 }
 
+async function pauseCampaignForWhatsApp(campaignId, userId) {
+  await query(
+    "UPDATE campaigns SET status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+    [campaignId]
+  );
+
+  const { rows } = await query('SELECT * FROM campaigns WHERE id = $1', [campaignId]);
+  const updatedCampaign = rows[0] || { id: campaignId, status: 'pending' };
+
+  const warning = {
+    campaignId,
+    code: 'whatsapp_not_connected',
+    message: 'WhatsApp is not connected. Please connect WhatsApp and start the campaign again.',
+  };
+
+  sseService.broadcastToUser(userId, 'campaign_warning', warning);
+  sseService.broadcastToCampaign(campaignId, 'campaign_warning', warning);
+  sseService.broadcastToUser(userId, 'campaign_paused', { campaignId, reason: 'whatsapp_not_connected' });
+  sseService.broadcastToCampaign(campaignId, 'campaign_update', updatedCampaign);
+  sseService.broadcastToUser(userId, 'campaign_update', updatedCampaign);
+}
+
 async function runCampaign(campaignId, userId) {
   if (runningCampaigns.has(campaignId)) {
     logger.warn({ campaignId }, 'Campaign already running');
@@ -79,6 +101,13 @@ async function runCampaign(campaignId, userId) {
 
     logger.info({ campaignId, count: pendingContacts.length }, 'Starting campaign run');
 
+    const connected = await waService.ensureConnected(userId, { timeoutMs: 5000, pollMs: 250 });
+    if (!connected) {
+      logger.warn({ campaignId, userId }, 'WhatsApp not connected after auto-connect attempt, pausing campaign');
+      await pauseCampaignForWhatsApp(campaignId, userId);
+      return;
+    }
+
     let buttons = [];
     try {
       buttons = template?.buttons ? JSON.parse(template.buttons) : [];
@@ -96,15 +125,7 @@ async function runCampaign(campaignId, userId) {
       // Check WhatsApp connection
       if (waService.getStatus(userId) !== 'connected') {
         logger.warn({ campaignId, userId }, 'WhatsApp disconnected mid-campaign, pausing');
-        await query(
-          "UPDATE campaigns SET status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-          [campaignId]
-        );
-        sseService.broadcastToUser(userId, 'campaign_paused', { campaignId });
-        sseService.broadcastToCampaign(campaignId, 'campaign_update', {
-          status: 'pending',
-          campaignId,
-        });
+        await pauseCampaignForWhatsApp(campaignId, userId);
         break;
       }
 
@@ -218,11 +239,7 @@ async function runCampaign(campaignId, userId) {
         const { rows: updatedRows } = await query('SELECT * FROM campaigns WHERE id = $1', [campaignId]);
         const updatedCampaign = updatedRows[0];
         sseService.broadcastToCampaign(campaignId, 'campaign_update', updatedCampaign);
-        sseService.broadcastToUser(userId, 'campaign_progress', {
-          campaignId,
-          sentCount: updatedCampaign.sent_count,
-          failedCount: updatedCampaign.failed_count,
-        });
+        sseService.broadcastToUser(userId, 'campaign_update', updatedCampaign);
         sseService.broadcastToUser(userId, 'credits_update', {
           credits: user.credits - 1,
         });
@@ -249,6 +266,7 @@ async function runCampaign(campaignId, userId) {
 
         const { rows: updatedRows } = await query('SELECT * FROM campaigns WHERE id = $1', [campaignId]);
         sseService.broadcastToCampaign(campaignId, 'campaign_update', updatedRows[0]);
+        sseService.broadcastToUser(userId, 'campaign_update', updatedRows[0]);
 
         await sleep(randomDelay(2, 4));
       }
@@ -270,7 +288,9 @@ async function runCampaign(campaignId, userId) {
         );
 
         const { rows: completedRows } = await query('SELECT * FROM campaigns WHERE id = $1', [campaignId]);
-        sseService.broadcastToCampaign(campaignId, 'campaign_update', completedRows[0]);
+        const completedCampaign = completedRows[0];
+        sseService.broadcastToCampaign(campaignId, 'campaign_update', completedCampaign);
+        sseService.broadcastToUser(userId, 'campaign_update', completedCampaign);
         sseService.broadcastToUser(userId, 'campaign_completed', { campaignId });
         sseService.broadcastToAdmins('stats_update', {});
         logger.info({ campaignId }, 'Campaign completed');

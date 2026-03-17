@@ -178,6 +178,14 @@ const migrations = [
       await query(`CREATE INDEX IF NOT EXISTS idx_wa_auth_keys_user ON wa_auth_keys(user_id, key_type, key_id)`);
     },
   },
+  {
+    version: 2,
+    name: 'query_performance_indexes',
+    up: async () => {
+      await query(`CREATE INDEX IF NOT EXISTS idx_contacts_user_created_desc ON contacts(user_id, created_at DESC)`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_templates_user_created_desc ON templates(user_id, created_at DESC)`);
+    },
+  },
 ];
 
 async function runMigrations() {

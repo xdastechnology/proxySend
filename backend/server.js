@@ -127,6 +127,31 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Legacy service worker cleanup endpoint.
+  // If users still have an older Workbox SW registered at /sw.js,
+  // this script will replace it and immediately unregister itself.
+  app.get('/sw.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.send(`
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    try {
+      await self.registration.unregister();
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((client) => client.navigate(client.url));
+    } catch (e) {
+      // no-op
+    }
+  })());
+});
+    `);
+  });
+
   // Serve frontend static files (built with `npm run build` in /frontend)
   app.use(express.static(FRONTEND_DIST));
 
@@ -147,8 +172,22 @@ async function startServer() {
   }
 
   const PORT = config.port;
-  app.listen(PORT, () => {
+  const httpServer = app.listen(PORT, () => {
     logger.info(`Proxy Send backend running on port ${PORT} [${config.nodeEnv}]`);
+  });
+
+  httpServer.on('error', (err) => {
+    if (err?.code === 'EADDRINUSE') {
+      logger.error(
+        { port: PORT },
+        `Port ${PORT} is already in use. Stop the existing backend process or run with a different PORT.`
+      );
+      process.exit(1);
+      return;
+    }
+
+    logger.error({ err }, 'HTTP server failed to start');
+    process.exit(1);
   });
 
   // Graceful shutdown

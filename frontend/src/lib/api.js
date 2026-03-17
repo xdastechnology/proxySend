@@ -27,9 +27,9 @@ export const authApi = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
   logout: () => api.post('/auth/logout'),
-  me: () => api.get('/auth/me'),
+  me: (requestConfig = {}) => api.get('/auth/me', requestConfig),
   adminLogin: (data) => api.post('/auth/admin/login', data),
-  adminMe: () => api.get('/auth/admin/me'),
+  adminMe: (requestConfig = {}) => api.get('/auth/admin/me', requestConfig),
 };
 
 // Profile
@@ -51,6 +51,7 @@ export const waApi = {
 // Contacts
 export const contactsApi = {
   list: (params) => api.get('/contacts', { params }),
+  picker: (params) => api.get('/contacts/picker', { params }),
   search: (q) => api.get('/contacts/search', { params: { q } }),
   get: (id) => api.get(`/contacts/${id}`),
   create: (data) => api.post('/contacts', data),

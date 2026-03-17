@@ -2,18 +2,25 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { authApi } from '../lib/api';
 
 const AuthContext = createContext(null);
+const AUTH_BOOT_TIMEOUT_MS = 6000;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchMe = useCallback(async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, AUTH_BOOT_TIMEOUT_MS);
+
     try {
-      const res = await authApi.me();
+      const res = await authApi.me({ signal: controller.signal });
       setUser(res.data.user);
     } catch {
       setUser(null);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }, []);

@@ -4,6 +4,7 @@ const { query } = require('../db');
 const { requireUser } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const { runCampaign } = require('../services/campaign');
+const waService = require('../services/whatsapp');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -165,6 +166,13 @@ router.post('/:id/start', async (req, res, next) => {
 
     if (campaign.status === 'completed') {
       return res.status(400).json({ error: 'Campaign already completed' });
+    }
+
+    // Try to establish WA connection immediately in the background.
+    if (waService.getStatus(userId) !== 'connected') {
+      waService.connectWhatsApp(userId).catch((err) => {
+        logger.warn({ err, campaignId, userId }, 'Auto-connect on campaign start failed');
+      });
     }
 
     // Start async (non-blocking)

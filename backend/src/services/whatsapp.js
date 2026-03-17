@@ -14,6 +14,12 @@ const sseService = require('./sse');
 
 // Map of userId -> { socket, status, qr }
 const connections = new Map();
+// Map of userId -> Promise for in-flight connect operation
+const connectInFlight = new Map();
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // PostgreSQL-based auth state for Baileys
 function usePgAuthState(userId) {
@@ -125,112 +131,139 @@ async function updateUserWaStatus(userId, status) {
 }
 
 async function connectWhatsApp(userId) {
-  // If already actively connected, return early
-  if (connections.has(userId)) {
-    const conn = connections.get(userId);
-    if (conn.status === 'connected') {
-      return conn;
-    }
-    // For any other state (connecting, qr_ready, disconnected) — clean up the old socket
-    try { conn.socket?.end?.(); } catch {}
-    connections.delete(userId);
+  const existing = connections.get(userId);
+  if (existing && ['connected', 'connecting', 'qr_ready'].includes(existing.status)) {
+    return existing;
   }
 
-  const conn = {
-    status: 'connecting',
-    qr: null,
-    socket: null,
-  };
-  connections.set(userId, conn);
-  await updateUserWaStatus(userId, 'connecting');
-  sseService.broadcastToUser(userId, 'wa_status', { status: 'connecting' });
+  if (connectInFlight.has(userId)) {
+    return connectInFlight.get(userId);
+  }
+
+  const connectPromise = (async () => {
+    const stale = connections.get(userId);
+    if (stale) {
+      try { stale.socket?.end?.(); } catch {}
+      connections.delete(userId);
+    }
+
+    const conn = {
+      status: 'connecting',
+      qr: null,
+      socket: null,
+    };
+    connections.set(userId, conn);
+    await updateUserWaStatus(userId, 'connecting');
+    sseService.broadcastToUser(userId, 'wa_status', { status: 'connecting' });
+
+    try {
+      const { version } = await fetchLatestBaileysVersion();
+      const buildState = usePgAuthState(userId);
+      const { state, saveCreds } = await buildState();
+
+      const socket = makeWASocket({
+        version,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, logger),
+        },
+        printQRInTerminal: false,
+        logger: logger.child({ component: 'baileys', userId }, { level: 'warn' }),
+        generateHighQualityLinkPreview: false,
+        syncFullHistory: false,
+        shouldSyncHistoryMessage: () => false,
+        markOnlineOnConnect: false,
+        connectTimeoutMs: 60000,
+        retryRequestDelayMs: 2000,
+        maxMsgRetryCount: 2,
+        browser: ['Proxy Send', 'Chrome', '10.0'],
+      });
+
+      conn.socket = socket;
+
+      socket.ev.on('creds.update', saveCreds);
+
+      socket.ev.on('connection.update', async (update) => {
+        // Ignore events from stale/replaced sockets.
+        if (connections.get(userId)?.socket !== socket) return;
+
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+          const QRCode = require('qrcode');
+          try {
+            const qrDataUrl = await QRCode.toDataURL(qr);
+            conn.qr = qrDataUrl;
+            conn.status = 'qr_ready';
+            await updateUserWaStatus(userId, 'qr_ready');
+            sseService.broadcastToUser(userId, 'wa_status', { status: 'qr_ready', qr: qrDataUrl });
+            sseService.broadcastToAdmins('users_update', { userId, wa_status: 'qr_ready' });
+          } catch (err) {
+            logger.error({ err }, 'QR generation failed');
+          }
+        }
+
+        if (connection === 'open') {
+          conn.status = 'connected';
+          conn.qr = null;
+          await updateUserWaStatus(userId, 'connected');
+          sseService.broadcastToUser(userId, 'wa_status', { status: 'connected' });
+          sseService.broadcastToAdmins('users_update', { userId, wa_status: 'connected' });
+          logger.info({ userId }, 'WhatsApp connected');
+        }
+
+        if (connection === 'close') {
+          const statusCode = lastDisconnect?.error instanceof Boom
+            ? lastDisconnect.error.output?.statusCode
+            : null;
+
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 401;
+
+          logger.info({ userId, statusCode, shouldReconnect }, 'WhatsApp connection closed');
+
+          if (shouldReconnect) {
+            logger.info({ userId, statusCode }, 'Connection closed — scheduling reconnect');
+            if (connections.get(userId)?.socket === socket) {
+              connections.delete(userId);
+            }
+            await updateUserWaStatus(userId, 'connecting');
+            sseService.broadcastToUser(userId, 'wa_status', { status: 'connecting' });
+            setTimeout(() => {
+              connectWhatsApp(userId).catch((err) => {
+                logger.warn({ err, userId }, 'Scheduled reconnect failed');
+              });
+            }, 3000);
+          } else {
+            // Logged out or Unauthorized (401) - clear auth
+            if (connections.get(userId)?.socket === socket) {
+              connections.delete(userId);
+            }
+            await updateUserWaStatus(userId, 'disconnected');
+            await clearAuthState(userId);
+            sseService.broadcastToUser(userId, 'wa_status', { status: 'disconnected' });
+            sseService.broadcastToAdmins('users_update', { userId, wa_status: 'disconnected' });
+          }
+        }
+      });
+
+      return conn;
+    } catch (err) {
+      logger.error({ err, userId }, 'Failed to connect WhatsApp');
+      conn.status = 'disconnected';
+      if (connections.get(userId)?.socket === conn.socket) {
+        connections.delete(userId);
+      }
+      await updateUserWaStatus(userId, 'disconnected');
+      throw err;
+    }
+  })();
+
+  connectInFlight.set(userId, connectPromise);
 
   try {
-    const { version } = await fetchLatestBaileysVersion();
-    const buildState = usePgAuthState(userId);
-    const { state, saveCreds } = await buildState();
-
-    const socket = makeWASocket({
-      version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, logger),
-      },
-      printQRInTerminal: false,
-      logger: logger.child({ component: 'baileys', userId }),
-      generateHighQualityLinkPreview: false,
-      syncFullHistory: false,
-      markOnlineOnConnect: false,
-      connectTimeoutMs: 60000,
-      retryRequestDelayMs: 2000,
-      maxMsgRetryCount: 2,
-      browser: ['Proxy Send', 'Chrome', '10.0'],
-    });
-
-    conn.socket = socket;
-
-    socket.ev.on('creds.update', saveCreds);
-
-    socket.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
-
-      if (qr) {
-        const QRCode = require('qrcode');
-        try {
-          const qrDataUrl = await QRCode.toDataURL(qr);
-          conn.qr = qrDataUrl;
-          conn.status = 'qr_ready';
-          await updateUserWaStatus(userId, 'qr_ready');
-          sseService.broadcastToUser(userId, 'wa_status', { status: 'qr_ready', qr: qrDataUrl });
-          sseService.broadcastToAdmins('users_update', { userId, wa_status: 'qr_ready' });
-        } catch (err) {
-          logger.error({ err }, 'QR generation failed');
-        }
-      }
-
-      if (connection === 'open') {
-        conn.status = 'connected';
-        conn.qr = null;
-        await updateUserWaStatus(userId, 'connected');
-        sseService.broadcastToUser(userId, 'wa_status', { status: 'connected' });
-        sseService.broadcastToAdmins('users_update', { userId, wa_status: 'connected' });
-        logger.info({ userId }, 'WhatsApp connected');
-      }
-
-      if (connection === 'close') {
-        const statusCode = lastDisconnect?.error instanceof Boom
-          ? lastDisconnect.error.output?.statusCode
-          : null;
-
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 401;
-
-        logger.info({ userId, statusCode, shouldReconnect }, 'WhatsApp connection closed');
-
-        if (shouldReconnect) {
-          logger.info({ userId, statusCode }, 'Connection closed — scheduling reconnect');
-          // Remove the dead connection entry so connectWhatsApp creates a fresh socket
-          connections.delete(userId);
-          await updateUserWaStatus(userId, 'connecting');
-          sseService.broadcastToUser(userId, 'wa_status', { status: 'connecting' });
-          setTimeout(() => connectWhatsApp(userId), 3000);
-        } else {
-          // Logged out or Unauthorized (401) - clear auth
-          connections.delete(userId);
-          await updateUserWaStatus(userId, 'disconnected');
-          await clearAuthState(userId);
-          sseService.broadcastToUser(userId, 'wa_status', { status: 'disconnected' });
-          sseService.broadcastToAdmins('users_update', { userId, wa_status: 'disconnected' });
-        }
-      }
-    });
-
-    return conn;
-  } catch (err) {
-    logger.error({ err, userId }, 'Failed to connect WhatsApp');
-    conn.status = 'disconnected';
-    connections.delete(userId);
-    await updateUserWaStatus(userId, 'disconnected');
-    throw err;
+    return await connectPromise;
+  } finally {
+    connectInFlight.delete(userId);
   }
 }
 
@@ -304,12 +337,31 @@ async function sendMessage(userId, phone, payload) {
   }
 }
 
+async function ensureConnected(userId, { timeoutMs = 8000, pollMs = 250 } = {}) {
+  if (getStatus(userId) === 'connected') return true;
+
+  try {
+    await connectWhatsApp(userId);
+  } catch (err) {
+    logger.warn({ err, userId }, 'Auto-connect attempt failed');
+  }
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (getStatus(userId) === 'connected') return true;
+    await sleep(pollMs);
+  }
+
+  return getStatus(userId) === 'connected';
+}
+
 module.exports = {
   connectWhatsApp,
   disconnectWhatsApp,
   getConnection,
   getSocket,
   getStatus,
+  ensureConnected,
   checkNumberOnWhatsApp,
   sendMessage,
 };

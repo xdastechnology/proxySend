@@ -91,6 +91,40 @@ router.get('/search', async (req, res, next) => {
   }
 });
 
+// Lightweight list for pickers/modals (avoids expensive count query)
+router.get(
+  '/picker',
+  [
+    queryParam('limit').optional().isInt({ min: 1, max: 1000 }).toInt(),
+    queryParam('search').optional().trim().isLength({ max: 100 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.session.userId;
+      const limit = req.query.limit || 200;
+      const search = req.query.search || '';
+
+      const params = [userId];
+      let whereClause = 'WHERE user_id = $1';
+
+      if (search) {
+        whereClause += ' AND (name ILIKE $2 OR phone ILIKE $2 OR email ILIKE $2)';
+        params.push(`%${search}%`);
+      }
+
+      const { rows: contacts } = await query(
+        `SELECT id, name, phone, email, gender FROM contacts ${whereClause} ORDER BY id DESC LIMIT $${params.length + 1}`,
+        [...params, limit]
+      );
+
+      res.json({ contacts });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // Get single contact
 router.get('/:id', async (req, res, next) => {
   try {
