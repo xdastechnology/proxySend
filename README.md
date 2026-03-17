@@ -42,3 +42,5 @@ npm run dev
 
 - `npm start` - start server
 - `npm run dev` - start with nodemon
+
+made some changes
