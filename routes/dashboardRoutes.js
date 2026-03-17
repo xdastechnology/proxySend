@@ -6,6 +6,7 @@ const UserModel = require('../models/userModel');
 const CampaignModel = require('../models/campaignModel');
 const logger = require('../config/logger');
 const { getConnectionStatus } = require('../config/baileys');
+const { buildUserSnapshot } = require('../services/realtimeSnapshotService');
 
 async function getDashboardPayload(userId) {
   const [stats, user, activeCampaigns] = await Promise.all([
@@ -49,16 +50,18 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/realtime', requireAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
-    const { stats, user, activeCampaigns, connectionStatus } = await getDashboardPayload(userId);
+    const campaignId = Number(req.query.campaignId || 0);
+    const includeCampaigns = req.query.includeCampaigns === '1';
+    const snapshot = await buildUserSnapshot(userId, {
+      includeCampaigns,
+      campaignId: Number.isInteger(campaignId) && campaignId > 0 ? campaignId : undefined,
+    });
 
-    if (user) req.session.user.credits = user.credits;
+    if (snapshot.user) req.session.user.credits = snapshot.user.credits;
 
     res.json({
       success: true,
-      stats,
-      activeCampaigns,
-      connectionStatus,
-      updatedAt: new Date().toISOString(),
+      ...snapshot,
     });
   } catch (err) {
     logger.error(`Dashboard realtime error: ${err.message}`);

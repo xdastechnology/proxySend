@@ -363,6 +363,19 @@ select.form-control {
   display: block;
 }
 
+.sidebar-status {
+  margin: 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .sidebar-nav {
   padding: 16px 12px;
   flex: 1;
@@ -412,6 +425,18 @@ select.form-control {
   width: 18px;
   text-align: center;
   font-size: 15px;
+}
+
+.nav-running-pill {
+  margin-left: auto;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid #FDE68A;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 8px;
 }
 
 .sidebar-footer {
@@ -512,6 +537,28 @@ select.form-control {
 
 .credits-badge i {
   font-size: 12px;
+}
+
+.global-running-badge {
+  margin-left: 8px;
+}
+
+.global-realtime-banner {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-bottom: 1px solid #FDE68A;
+}
+
+.global-realtime-banner.admin {
+  background: #1F2937;
+  color: #FBBF24;
+  border-bottom: 1px solid #374151;
 }
 
 /* Page Content */
@@ -756,6 +803,11 @@ select.form-control {
 .connection-indicator.connecting {
   background: var(--warning-bg);
   color: var(--warning);
+}
+
+.connection-indicator.compact {
+  padding: 5px 10px;
+  font-size: 12px;
 }
 
 .dot {

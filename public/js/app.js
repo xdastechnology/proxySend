@@ -482,41 +482,515 @@ function renderDashboardWhatsAppStatus(status) {
   `;
 }
 
-function initDashboardRealtime() {
-  const root = document.getElementById('dashboardRealtimeRoot');
-  if (!root) return;
+const realtimeRuntime = {
+  baseTitle: document.title.replace(/^\[[0-9]+ running\]\s*/i, ''),
+  userEventSource: null,
+  adminEventSource: null,
+  userPollTimer: null,
+  adminPollTimer: null,
+  userReconnectTimer: null,
+  adminReconnectTimer: null,
+};
 
-  const ids = {
-    totalContacts: document.getElementById('dashboardTotalContacts'),
-    totalTemplates: document.getElementById('dashboardTotalTemplates'),
-    activeCampaigns: document.getElementById('dashboardActiveCampaigns'),
-    messagesSent: document.getElementById('dashboardMessagesSent'),
-    credits: document.getElementById('dashboardCredits'),
+function setRunningTitlePrefix(runningCount) {
+  const count = Number(runningCount || 0);
+  if (count > 0) {
+    document.title = `[${count} running] ${realtimeRuntime.baseTitle}`;
+    return;
+  }
+  document.title = realtimeRuntime.baseTitle;
+}
+
+function renderCampaignStatusBadge(status) {
+  if (status === 'completed') {
+    return '<span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Completed</span>';
+  }
+  if (status === 'running') {
+    return '<span class="badge badge-warning"><span class="dot orange"></span> Running</span>';
+  }
+  return '<span class="badge badge-secondary"><i class="fa-solid fa-clock"></i> Pending</span>';
+}
+
+function renderContactStatusBadge(status) {
+  if (status === 'sent') {
+    return '<span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Sent</span>';
+  }
+  if (status === 'failed') {
+    return '<span class="badge badge-danger"><i class="fa-solid fa-circle-xmark"></i> Failed</span>';
+  }
+  return '<span class="badge badge-secondary"><i class="fa-solid fa-clock"></i> Pending</span>';
+}
+
+function renderCreditsBalanceBadge(credits) {
+  const value = Number(credits || 0);
+  if (value === 0) {
+    return '<span class="badge badge-danger" style="font-size:13px; padding: 6px 16px;"><i class="fa-solid fa-circle-xmark"></i> No Credits</span>';
+  }
+  if (value < 20) {
+    return '<span class="badge badge-warning" style="font-size:13px; padding: 6px 16px;"><i class="fa-solid fa-triangle-exclamation"></i> Low Balance</span>';
+  }
+  return '<span class="badge badge-success" style="font-size:13px; padding: 6px 16px;"><i class="fa-solid fa-circle-check"></i> Active</span>';
+}
+
+function applyCredits(credits) {
+  const value = Number(credits || 0);
+  const globalCredits = document.getElementById('globalCreditsValue');
+  const dashboardCredits = document.getElementById('dashboardCredits');
+  const creditsBalance = document.getElementById('creditsBalanceValue');
+  const creditsBadge = document.getElementById('creditsBalanceBadge');
+
+  if (globalCredits) globalCredits.textContent = formatNumber(value);
+  if (dashboardCredits) dashboardCredits.textContent = formatNumber(value);
+  if (creditsBalance) creditsBalance.textContent = formatNumber(value);
+  if (creditsBadge) creditsBadge.innerHTML = renderCreditsBalanceBadge(value);
+}
+
+function applyDashboardStats(stats) {
+  if (!stats) return;
+  const totalContacts = document.getElementById('dashboardTotalContacts');
+  const totalTemplates = document.getElementById('dashboardTotalTemplates');
+  const activeCampaigns = document.getElementById('dashboardActiveCampaigns');
+  const messagesSent = document.getElementById('dashboardMessagesSent');
+
+  if (totalContacts) totalContacts.textContent = formatNumber(stats.totalContacts);
+  if (totalTemplates) totalTemplates.textContent = formatNumber(stats.totalTemplates);
+  if (activeCampaigns) activeCampaigns.textContent = formatNumber(stats.activeCampaigns);
+  if (messagesSent) messagesSent.textContent = formatNumber(stats.messagesSent);
+}
+
+function applyConnectionStatus(status) {
+  const indicator = document.getElementById('globalTopbarConnectionIndicator');
+  const dot = document.getElementById('globalTopbarConnectionDot');
+  const text = document.getElementById('globalTopbarConnectionText');
+
+  if (!indicator || !dot || !text) return;
+
+  if (status === 'connected') {
+    indicator.className = 'connection-indicator connected compact';
+    dot.className = 'dot green';
+    text.textContent = 'Connected';
+    return;
+  }
+
+  if (status === 'connecting' || status === 'qr_ready') {
+    indicator.className = 'connection-indicator connecting compact';
+    dot.className = 'dot orange';
+    text.textContent = 'Connecting';
+    return;
+  }
+
+  indicator.className = 'connection-indicator disconnected compact';
+  dot.className = 'dot red';
+  text.textContent = 'Disconnected';
+}
+
+function applyRunningIndicators(runningCount, connectionStatus) {
+  const count = Number(runningCount || 0);
+  const topbarBadge = document.getElementById('globalRunningBadge');
+  const topbarCount = document.getElementById('globalRunningCount');
+  const sidebarPill = document.getElementById('sidebarRunningCount');
+  const sidebarDot = document.getElementById('globalSidebarStatusDot');
+  const sidebarText = document.getElementById('globalSidebarStatusText');
+  const banner = document.getElementById('globalRealtimeBanner');
+
+  if (topbarBadge && topbarCount) {
+    topbarCount.textContent = String(count);
+    topbarBadge.style.display = count > 0 ? 'inline-flex' : 'none';
+  }
+
+  if (sidebarPill) {
+    sidebarPill.textContent = String(count);
+    sidebarPill.style.display = count > 0 ? 'inline-flex' : 'none';
+  }
+
+  if (sidebarDot && sidebarText) {
+    if (count > 0) {
+      sidebarDot.className = 'dot orange';
+      sidebarText.textContent = `${count} campaign${count === 1 ? '' : 's'} running in background`;
+    } else if (connectionStatus === 'connected') {
+      sidebarDot.className = 'dot green';
+      sidebarText.textContent = 'No active campaigns';
+    } else {
+      sidebarDot.className = 'dot red';
+      sidebarText.textContent = 'WhatsApp disconnected';
+    }
+  }
+
+  if (banner) {
+    if (count > 0) {
+      banner.innerHTML = `<span class="dot orange"></span> ${count} campaign${count === 1 ? '' : 's'} running in background`;
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  setRunningTitlePrefix(count);
+}
+
+function renderCampaignListRealtime(campaigns) {
+  if (!Array.isArray(campaigns)) return;
+
+  campaigns.forEach((campaign) => {
+    const campaignId = Number(campaign.id);
+    if (!Number.isInteger(campaignId)) return;
+
+    const progressText = document.getElementById(`campaign-progress-text-${campaignId}`);
+    const progressBar = document.getElementById(`campaign-progress-bar-${campaignId}`);
+    const statusBadge = document.getElementById(`campaign-status-badge-${campaignId}`);
+
+    const total = Number(campaign.total_contacts || 0);
+    const sent = Number(campaign.sent_count || 0);
+    const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+
+    if (progressText) {
+      progressText.textContent = `${sent}/${total}`;
+    }
+
+    if (progressBar) {
+      progressBar.style.width = `${pct}%`;
+      progressBar.classList.toggle('success', campaign.status === 'completed');
+    }
+
+    if (statusBadge) {
+      statusBadge.innerHTML = renderCampaignStatusBadge(campaign.status);
+    }
+  });
+}
+
+function renderCampaignDetailRealtime(campaign, contacts) {
+  if (!campaign) return;
+
+  const total = Number(campaign.total_contacts || 0);
+  const sent = Number(campaign.sent_count || 0);
+  const failed = Number(campaign.failed_count || 0);
+  const pending = Math.max(total - sent - failed, 0);
+  const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+
+  const statTotal = document.getElementById('campaign-stat-total');
+  const statSent = document.getElementById('campaign-stat-sent');
+  const statFailed = document.getElementById('campaign-stat-failed');
+  const statPending = document.getElementById('campaign-stat-pending');
+  const pctEl = document.getElementById('campaign-progress-pct');
+  const barEl = document.getElementById('campaign-progress-bar');
+  const statusWrap = document.getElementById('campaignDetailsStatusBadge');
+
+  if (statTotal) statTotal.textContent = String(total);
+  if (statSent) statSent.textContent = String(sent);
+  if (statFailed) statFailed.textContent = String(failed);
+  if (statPending) statPending.textContent = String(pending);
+  if (pctEl) pctEl.textContent = `${pct}%`;
+  if (barEl) {
+    barEl.style.width = `${pct}%`;
+    barEl.classList.toggle('success', campaign.status === 'completed');
+  }
+  if (statusWrap) {
+    statusWrap.innerHTML = renderCampaignStatusBadge(campaign.status);
+  }
+
+  if (Array.isArray(contacts)) {
+    contacts.forEach((contact) => {
+      const contactId = Number(contact.id);
+      if (!Number.isInteger(contactId)) return;
+
+      const statusEl = document.getElementById(`campaign-contact-status-${contactId}`);
+      const sentAtEl = document.getElementById(`campaign-contact-sentat-${contactId}`);
+      const errorEl = document.getElementById(`campaign-contact-error-${contactId}`);
+
+      if (statusEl) statusEl.innerHTML = renderContactStatusBadge(contact.status);
+      if (sentAtEl) sentAtEl.textContent = contact.sent_at ? new Date(contact.sent_at).toLocaleString() : '-';
+      if (errorEl) errorEl.textContent = contact.error_message || '-';
+    });
+  }
+}
+
+function applyUserRealtimeSnapshot(payload) {
+  if (!payload || payload.success === false) return;
+
+  const creditsValue = payload.user && payload.user.credits !== undefined
+    ? payload.user.credits
+    : payload.stats && payload.stats.credits !== undefined
+      ? payload.stats.credits
+      : null;
+
+  if (creditsValue !== null) {
+    applyCredits(creditsValue);
+  }
+
+  applyDashboardStats(payload.stats);
+
+  if (Array.isArray(payload.activeCampaigns)) {
+    renderDashboardCampaignProgress(payload.activeCampaigns);
+  }
+
+  if (payload.connectionStatus) {
+    renderDashboardWhatsAppStatus(payload.connectionStatus);
+    applyConnectionStatus(payload.connectionStatus);
+  }
+
+  if (Array.isArray(payload.campaigns)) {
+    renderCampaignListRealtime(payload.campaigns);
+  }
+
+  if (payload.campaignDetail) {
+    renderCampaignDetailRealtime(payload.campaignDetail, payload.campaignContacts || []);
+  }
+
+  const runningCountFromCampaigns = Array.isArray(payload.campaigns)
+    ? payload.campaigns.filter((campaign) => campaign.status === 'running').length
+    : null;
+  const runningCountFromActive = Array.isArray(payload.activeCampaigns)
+    ? payload.activeCampaigns.filter((campaign) => campaign.status === 'running').length
+    : 0;
+  const runningCount = runningCountFromCampaigns !== null ? runningCountFromCampaigns : runningCountFromActive;
+
+  applyRunningIndicators(runningCount, payload.connectionStatus || 'disconnected');
+}
+
+function applyAdminRealtimeSnapshot(payload) {
+  if (!payload || payload.success === false) return;
+
+  const runningCount = Number(payload.runningCount || 0);
+  const runningBadge = document.getElementById('adminRunningBadge');
+  const runningCountEl = document.getElementById('adminRunningCount');
+  const banner = document.getElementById('adminGlobalRealtimeBanner');
+
+  if (runningBadge && runningCountEl) {
+    runningCountEl.textContent = String(runningCount);
+    runningBadge.style.display = runningCount > 0 ? 'inline-flex' : 'none';
+  }
+
+  if (banner) {
+    if (runningCount > 0) {
+      banner.innerHTML = `<span class="dot orange"></span> ${runningCount} campaign${runningCount === 1 ? '' : 's'} running in background`;
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  setRunningTitlePrefix(runningCount);
+
+  if (payload.totals) {
+    const totalUsers = document.getElementById('admin-total-users');
+    const totalTransactions = document.getElementById('admin-total-transactions');
+    const totalMessages = document.getElementById('admin-total-messages');
+
+    if (totalUsers) totalUsers.textContent = formatNumber(payload.totals.users);
+    if (totalTransactions) totalTransactions.textContent = formatNumber(payload.totals.transactions);
+    if (totalMessages) totalMessages.textContent = formatNumber(payload.totals.messages);
+  }
+
+  if (Array.isArray(payload.users)) {
+    payload.users.forEach((user) => {
+      const creditsMain = document.getElementById(`admin-user-credits-${user.id}`);
+      const creditsAdd = document.getElementById(`admin-add-user-credits-${user.id}`);
+
+      if (creditsMain) creditsMain.textContent = formatNumber(user.credits);
+      if (creditsAdd) creditsAdd.textContent = formatNumber(user.credits);
+
+      const selectOption = document.querySelector(`#userSelect option[data-user-id="${user.id}"]`);
+      if (selectOption) {
+        selectOption.dataset.credits = String(user.credits);
+        const currentText = selectOption.textContent || '';
+        const prefix = currentText.split(' — ')[0];
+        selectOption.textContent = `${prefix} — ${formatNumber(user.credits)} credits`;
+      }
+    });
+
+    const userSelect = document.getElementById('userSelect');
+    const currentCreditsValue = document.getElementById('currentCreditsValue');
+    if (userSelect && currentCreditsValue && userSelect.selectedIndex >= 0) {
+      const selected = userSelect.options[userSelect.selectedIndex];
+      if (selected && selected.dataset.credits) {
+        currentCreditsValue.textContent = formatNumber(selected.dataset.credits);
+      }
+    }
+  }
+}
+
+function setAdminStreamState(connected) {
+  const badge = document.getElementById('adminStreamStateBadge');
+  const dot = document.getElementById('adminStreamStateDot');
+  const text = document.getElementById('adminStreamStateText');
+  if (!badge || !dot || !text) return;
+
+  if (connected) {
+    badge.className = 'badge badge-success';
+    dot.className = 'dot green';
+    text.textContent = 'Live';
+  } else {
+    badge.className = 'badge badge-secondary';
+    dot.className = 'dot red';
+    text.textContent = 'Offline';
+  }
+}
+
+function buildUserRealtimeUrls(bootstrapEl) {
+  const streamUrl = bootstrapEl.getAttribute('data-stream-url');
+  const pollUrl = bootstrapEl.getAttribute('data-poll-url');
+  const params = new URLSearchParams();
+
+  if (document.getElementById('campaignsRealtimeRoot')) {
+    params.set('includeCampaigns', '1');
+  }
+
+  const campaignRoot = document.getElementById('campaignDetailsRoot');
+  if (campaignRoot) {
+    const campaignId = Number(campaignRoot.getAttribute('data-campaign-id'));
+    if (Number.isInteger(campaignId) && campaignId > 0) {
+      params.set('campaignId', String(campaignId));
+    }
+  }
+
+  const query = params.toString();
+  return {
+    stream: query ? `${streamUrl}?${query}` : streamUrl,
+    poll: query ? `${pollUrl}?${query}` : pollUrl,
   };
+}
 
-  const refreshMs = Number(root.getAttribute('data-refresh-ms')) || 4000;
+function stopUserPolling() {
+  if (realtimeRuntime.userPollTimer) {
+    clearInterval(realtimeRuntime.userPollTimer);
+    realtimeRuntime.userPollTimer = null;
+  }
+}
+
+function startUserPolling(pollUrl) {
+  if (realtimeRuntime.userPollTimer) return;
 
   const pull = async () => {
     try {
-      const res = await fetch('/dashboard/realtime');
+      const res = await fetch(pollUrl, { cache: 'no-store' });
       const data = await res.json();
-      if (!data.success) return;
-
-      if (ids.totalContacts) ids.totalContacts.textContent = formatNumber(data.stats.totalContacts);
-      if (ids.totalTemplates) ids.totalTemplates.textContent = formatNumber(data.stats.totalTemplates);
-      if (ids.activeCampaigns) ids.activeCampaigns.textContent = formatNumber(data.stats.activeCampaigns);
-      if (ids.messagesSent) ids.messagesSent.textContent = formatNumber(data.stats.messagesSent);
-      if (ids.credits) ids.credits.textContent = formatNumber(data.stats.credits);
-
-      renderDashboardCampaignProgress(data.activeCampaigns);
-      renderDashboardWhatsAppStatus(data.connectionStatus);
+      applyUserRealtimeSnapshot(data);
     } catch (err) {
-      console.error('Dashboard realtime error:', err);
+      console.error('User realtime poll error:', err);
     }
   };
 
   pull();
-  setInterval(pull, refreshMs);
+  realtimeRuntime.userPollTimer = setInterval(pull, 4000);
+}
+
+function connectUserStream(streamUrl, pollUrl) {
+  if (realtimeRuntime.userEventSource) {
+    realtimeRuntime.userEventSource.close();
+  }
+
+  const eventSource = new EventSource(streamUrl);
+  realtimeRuntime.userEventSource = eventSource;
+
+  eventSource.addEventListener('state', (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      applyUserRealtimeSnapshot(payload);
+      stopUserPolling();
+    } catch (err) {
+      console.error('User realtime parse error:', err);
+    }
+  });
+
+  eventSource.onerror = () => {
+    if (realtimeRuntime.userEventSource !== eventSource) return;
+    eventSource.close();
+    realtimeRuntime.userEventSource = null;
+    startUserPolling(pollUrl);
+
+    if (!realtimeRuntime.userReconnectTimer) {
+      realtimeRuntime.userReconnectTimer = setTimeout(() => {
+        realtimeRuntime.userReconnectTimer = null;
+        connectUserStream(streamUrl, pollUrl);
+      }, 6000);
+    }
+  };
+}
+
+function startUserRealtime() {
+  const bootstrapEl = document.getElementById('realtimeUserBootstrap');
+  if (!bootstrapEl) return;
+
+  const initialCredits = Number(bootstrapEl.getAttribute('data-initial-credits'));
+  if (!Number.isNaN(initialCredits)) {
+    applyCredits(initialCredits);
+  }
+
+  const urls = buildUserRealtimeUrls(bootstrapEl);
+  connectUserStream(urls.stream, urls.poll);
+}
+
+function stopAdminPolling() {
+  if (realtimeRuntime.adminPollTimer) {
+    clearInterval(realtimeRuntime.adminPollTimer);
+    realtimeRuntime.adminPollTimer = null;
+  }
+}
+
+function startAdminPolling(pollUrl) {
+  if (realtimeRuntime.adminPollTimer) return;
+
+  const pull = async () => {
+    try {
+      const res = await fetch(pollUrl, { cache: 'no-store' });
+      const data = await res.json();
+      applyAdminRealtimeSnapshot(data);
+    } catch (err) {
+      console.error('Admin realtime poll error:', err);
+    }
+  };
+
+  pull();
+  realtimeRuntime.adminPollTimer = setInterval(pull, 5000);
+}
+
+function connectAdminStream(streamUrl, pollUrl) {
+  if (realtimeRuntime.adminEventSource) {
+    realtimeRuntime.adminEventSource.close();
+  }
+
+  const eventSource = new EventSource(streamUrl);
+  realtimeRuntime.adminEventSource = eventSource;
+
+  eventSource.addEventListener('admin-state', (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      applyAdminRealtimeSnapshot(payload);
+      setAdminStreamState(true);
+      stopAdminPolling();
+    } catch (err) {
+      console.error('Admin realtime parse error:', err);
+    }
+  });
+
+  eventSource.onerror = () => {
+    if (realtimeRuntime.adminEventSource !== eventSource) return;
+    eventSource.close();
+    realtimeRuntime.adminEventSource = null;
+    setAdminStreamState(false);
+    startAdminPolling(pollUrl);
+
+    if (!realtimeRuntime.adminReconnectTimer) {
+      realtimeRuntime.adminReconnectTimer = setTimeout(() => {
+        realtimeRuntime.adminReconnectTimer = null;
+        connectAdminStream(streamUrl, pollUrl);
+      }, 7000);
+    }
+  };
+}
+
+function startAdminRealtime() {
+  const bootstrapEl = document.getElementById('realtimeAdminBootstrap');
+  if (!bootstrapEl) return;
+
+  const streamUrl = bootstrapEl.getAttribute('data-stream-url');
+  const pollUrl = bootstrapEl.getAttribute('data-poll-url');
+  connectAdminStream(streamUrl, pollUrl);
+}
+
+function initRealtime() {
+  startUserRealtime();
+  startAdminRealtime();
 }
 
 // ============================================
@@ -528,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSelectAll();
   initTemplatePreview();
   initFileUpload('csvFile', 'csvUploadLabel');
-  initDashboardRealtime();
+  initRealtime();
   initCampaignContactFilters();
 
   if (document.getElementById('qrContainer')) {

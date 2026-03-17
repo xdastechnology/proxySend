@@ -9,6 +9,11 @@
     </div>
   </div>
 
+  <div class="sidebar-status" id="globalSidebarStatusBox">
+    <span class="dot red" id="globalSidebarStatusDot"></span>
+    <span id="globalSidebarStatusText">No active campaigns</span>
+  </div>
+
   <nav class="sidebar-nav">
     <div class="nav-label">Main</div>
     <a href="/dashboard" class="nav-item <%= currentPath === '/dashboard' ? 'active' : '' %>">
@@ -26,6 +31,7 @@
     <a href="/campaigns" class="nav-item <%= currentPath.startsWith('/campaigns') ? 'active' : '' %>">
       <i class="fa-solid fa-paper-plane"></i>
       Campaigns
+      <span class="nav-running-pill" id="sidebarRunningCount" style="display:none;">0</span>
     </a>
 
     <div class="nav-label">Account</div>

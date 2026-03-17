@@ -1,17 +1,19 @@
 const {
   default: makeWASocket,
   DisconnectReason,
-  useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
 } = require('@whiskeysockets/baileys');
-const path = require('path');
-const fs = require('fs');
 const pino = require('pino');
 const logger = require('./logger');
-const { getDatabase } = require('./database');
+const { dbRun } = require('./database');
+const {
+  useTursoAuthState,
+  hasTursoAuthState,
+  clearTursoAuthState,
+} = require('./tursoAuthState');
+const { publishUserUpdate, publishAdminUpdate } = require('../services/realtimeService');
 
-const SESSIONS_DIR = path.join(__dirname, '..', 'sessions');
 const activeSockets = new Map();
 const qrCodes = new Map();
 const connectionStatus = new Map();
@@ -20,18 +22,8 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function getSessionPath(userId) {
-  return path.join(SESSIONS_DIR, `user_${userId}`);
-}
-
 async function createWhatsAppSocket(userId) {
-  const sessionPath = getSessionPath(userId);
-
-  if (!fs.existsSync(sessionPath)) {
-    fs.mkdirSync(sessionPath, { recursive: true });
-  }
-
-  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  const { state, saveCreds } = await useTursoAuthState(userId);
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
@@ -76,14 +68,23 @@ async function createWhatsAppSocket(userId) {
       connectionStatus.set(userId, 'disconnected');
       activeSockets.delete(userId);
       qrCodes.delete(userId);
+      publishUserUpdate(userId, 'whatsapp_status', { status: 'disconnected' });
+      publishAdminUpdate('whatsapp_status', { userId: Number(userId), status: 'disconnected' });
 
       // Update database
-      const db = getDatabase();
-      db.prepare('UPDATE users SET whatsapp_connected = 0 WHERE id = ?').run(userId);
+      try {
+        await dbRun('UPDATE users SET whatsapp_connected = 0 WHERE id = ?', [userId]);
+      } catch (dbErr) {
+        logger.error(`Failed to update whatsapp status for user ${userId}: ${dbErr.message}`);
+      }
 
       if (shouldReconnect) {
         logger.info(`Attempting reconnect for user ${userId}...`);
-        setTimeout(() => createWhatsAppSocket(userId), 5000);
+        setTimeout(() => {
+          createWhatsAppSocket(userId).catch((err) => {
+            logger.error(`Reconnect failed for user ${userId}: ${err.message}`);
+          });
+        }, 5000);
       }
     }
 
@@ -92,10 +93,15 @@ async function createWhatsAppSocket(userId) {
       connectionStatus.set(userId, 'connected');
       qrCodes.delete(userId);
       activeSockets.set(userId, sock);
+      publishUserUpdate(userId, 'whatsapp_status', { status: 'connected' });
+      publishAdminUpdate('whatsapp_status', { userId: Number(userId), status: 'connected' });
 
       // Update database
-      const db = getDatabase();
-      db.prepare('UPDATE users SET whatsapp_connected = 1 WHERE id = ?').run(userId);
+      try {
+        await dbRun('UPDATE users SET whatsapp_connected = 1 WHERE id = ?', [userId]);
+      } catch (dbErr) {
+        logger.error(`Failed to update whatsapp status for user ${userId}: ${dbErr.message}`);
+      }
     }
   });
 
@@ -109,13 +115,9 @@ async function getSocket(userId) {
     return activeSockets.get(userId);
   }
 
-  const sessionPath = getSessionPath(userId);
-  if (fs.existsSync(sessionPath)) {
-    const files = fs.readdirSync(sessionPath);
-    if (files.length > 0) {
-      const sock = await createWhatsAppSocket(userId);
-      return sock;
-    }
+  const hasAuth = await hasTursoAuthState(userId);
+  if (hasAuth) {
+    return await createWhatsAppSocket(userId);
   }
 
   return null;
@@ -161,21 +163,17 @@ async function disconnectSocket(userId) {
   if (sock) {
     await sock.logout();
     activeSockets.delete(userId);
-    connectionStatus.set(userId, 'disconnected');
-    qrCodes.delete(userId);
-
-    // Remove session files
-    const sessionPath = getSessionPath(userId);
-    if (fs.existsSync(sessionPath)) {
-      fs.rmSync(sessionPath, { recursive: true, force: true });
-    }
-
-    // Update database
-    const db = getDatabase();
-    db.prepare('UPDATE users SET whatsapp_connected = 0 WHERE id = ?').run(userId);
-
-    logger.info(`WhatsApp disconnected for user ${userId}`);
   }
+
+  connectionStatus.set(userId, 'disconnected');
+  qrCodes.delete(userId);
+  publishUserUpdate(userId, 'whatsapp_status', { status: 'disconnected' });
+  publishAdminUpdate('whatsapp_status', { userId: Number(userId), status: 'disconnected' });
+
+  await clearTursoAuthState(userId);
+  await dbRun('UPDATE users SET whatsapp_connected = 0 WHERE id = ?', [userId]);
+
+  logger.info(`WhatsApp disconnected for user ${userId}`);
 }
 
 async function sendTextMessage(userId, phone, message) {

@@ -1,67 +1,128 @@
-// config/database.js
-const sqlite3 = require('sqlite3').verbose();
+const { createClient } = require('@libsql/client');
 const path = require('path');
 const fs = require('fs');
 const logger = require('./logger');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
-const DB_PATH = path.join(DATA_DIR, 'proxysend.db');
 
-// Ensure directories exist
 [
   DATA_DIR,
-  path.join(__dirname, '..', 'sessions'),
-  path.join(__dirname, '..', 'logs'),
   path.join(__dirname, '..', 'data', 'uploads'),
   path.join(__dirname, '..', 'data', 'uploads', 'template-media'),
+  path.join(__dirname, '..', 'data', 'uploads', 'template-temp'),
 ].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-let db;
+let client;
+
+function normalizeValue(value) {
+  if (typeof value === 'bigint') {
+    const asNumber = Number(value);
+    if (Number.isSafeInteger(asNumber)) {
+      return asNumber;
+    }
+    return value.toString();
+  }
+
+  return value;
+}
+
+function normalizeRow(row) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(row || {})) {
+    normalized[key] = normalizeValue(value);
+  }
+  return normalized;
+}
+
+function resultLastInsertId(result) {
+  if (!result || result.lastInsertRowid == null) {
+    return null;
+  }
+
+  return normalizeValue(result.lastInsertRowid);
+}
 
 function getDatabase() {
-  if (!db) {
-    db = new sqlite3.Database(DB_PATH, (err) => {
-      if (err) {
-        logger.error('Database connection error: ' + err.message);
-        process.exit(1);
-      }
-    });
-    db.serialize(() => {
-      db.run('PRAGMA journal_mode = WAL');
-      db.run('PRAGMA foreign_keys = ON');
+  if (!client) {
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+
+    if (!url || !authToken) {
+      throw new Error('TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required');
+    }
+
+    client = createClient({
+      url,
+      authToken,
+      intMode: 'number',
     });
   }
-  return db;
+
+  return client;
 }
 
-// Promise wrappers for cleaner async usage
-function dbRun(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    getDatabase().run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve({ lastID: this.lastID, changes: this.changes });
-    });
+async function executeStatement(executor, sql, params = []) {
+  return executor.execute({
+    sql,
+    args: params,
   });
 }
 
-function dbGet(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    getDatabase().get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
+async function dbRun(sql, params = []) {
+  const result = await executeStatement(getDatabase(), sql, params);
+  return {
+    lastID: resultLastInsertId(result),
+    changes: normalizeValue(result.rowsAffected || 0),
+  };
 }
 
-function dbAll(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    getDatabase().all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
+async function dbGet(sql, params = []) {
+  const result = await executeStatement(getDatabase(), sql, params);
+  const row = result.rows && result.rows.length > 0 ? result.rows[0] : null;
+  return row ? normalizeRow(row) : undefined;
+}
+
+async function dbAll(sql, params = []) {
+  const result = await executeStatement(getDatabase(), sql, params);
+  return (result.rows || []).map(normalizeRow);
+}
+
+async function dbTransaction(handler) {
+  const tx = await getDatabase().transaction();
+
+  const txApi = {
+    run: async (sql, params = []) => {
+      const result = await executeStatement(tx, sql, params);
+      return {
+        lastID: resultLastInsertId(result),
+        changes: normalizeValue(result.rowsAffected || 0),
+      };
+    },
+    get: async (sql, params = []) => {
+      const result = await executeStatement(tx, sql, params);
+      const row = result.rows && result.rows.length > 0 ? result.rows[0] : null;
+      return row ? normalizeRow(row) : undefined;
+    },
+    all: async (sql, params = []) => {
+      const result = await executeStatement(tx, sql, params);
+      return (result.rows || []).map(normalizeRow);
+    },
+  };
+
+  try {
+    const output = await handler(txApi);
+    await tx.commit();
+    return output;
+  } catch (err) {
+    try {
+      await tx.rollback();
+    } catch (rollbackErr) {
+      logger.error(`Transaction rollback failed: ${rollbackErr.message}`);
+    }
+    throw err;
+  }
 }
 
 async function ensureContactColumns() {
@@ -108,6 +169,8 @@ async function ensureTemplateColumns() {
 
 async function initializeDatabase() {
   logger.info('Initializing database...');
+
+  await dbRun('PRAGMA foreign_keys = ON');
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS users (
@@ -211,7 +274,51 @@ async function initializeDatabase() {
     )
   `);
 
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS app_sessions (
+      sid TEXT PRIMARY KEY,
+      sess TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS wa_auth_creds (
+      user_id INTEGER PRIMARY KEY,
+      creds_json TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS wa_auth_keys (
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      id TEXT NOT NULL,
+      data_json TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, type, id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await dbRun(
+    'CREATE INDEX IF NOT EXISTS idx_wa_auth_keys_user_type ON wa_auth_keys(user_id, type)'
+  );
+
+  await dbRun('CREATE INDEX IF NOT EXISTS idx_app_sessions_expires ON app_sessions(expires_at)');
+
   logger.info('Database initialized successfully');
 }
 
-module.exports = { getDatabase, initializeDatabase, dbRun, dbGet, dbAll };
+module.exports = {
+  getDatabase,
+  initializeDatabase,
+  dbRun,
+  dbGet,
+  dbAll,
+  dbTransaction,
+};

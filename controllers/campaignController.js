@@ -98,6 +98,10 @@ async function startCampaign(req, res) {
       return res.redirect('/campaigns?error=Campaign already completed');
     }
 
+    if (campaignService.isCampaignRunning(campaignId)) {
+      return res.redirect('/campaigns?error=Campaign is already running in background');
+    }
+
     // Start campaign asynchronously
     campaignService.runCampaign(userId, campaignId).catch((err) => {
       logger.error(`Campaign ${campaignId} failed: ${err.message}`);

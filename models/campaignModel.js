@@ -1,22 +1,24 @@
 // models/campaignModel.js
-const { dbRun, dbGet, dbAll } = require('../config/database');
+const { dbRun, dbGet, dbAll, dbTransaction } = require('../config/database');
 
 class CampaignModel {
   static async create({ userId, campaignName, templateId, contactIds }) {
-    const campaignResult = await dbRun(
-      'INSERT INTO campaigns (user_id, campaign_name, template_id, total_contacts) VALUES (?, ?, ?, ?)',
-      [userId, campaignName, templateId, contactIds.length]
-    );
-    const campaignId = campaignResult.lastID;
-
-    for (const contactId of contactIds) {
-      await dbRun(
-        'INSERT INTO campaign_contacts (campaign_id, contact_id) VALUES (?, ?)',
-        [campaignId, contactId]
+    return dbTransaction(async (tx) => {
+      const campaignResult = await tx.run(
+        'INSERT INTO campaigns (user_id, campaign_name, template_id, total_contacts) VALUES (?, ?, ?, ?)',
+        [userId, campaignName, templateId, contactIds.length]
       );
-    }
+      const campaignId = campaignResult.lastID;
 
-    return campaignId;
+      for (const contactId of contactIds) {
+        await tx.run(
+          'INSERT INTO campaign_contacts (campaign_id, contact_id) VALUES (?, ?)',
+          [campaignId, contactId]
+        );
+      }
+
+      return campaignId;
+    });
   }
 
   static async findByUserId(userId) {
@@ -50,6 +52,27 @@ class CampaignModel {
        ORDER BY CASE c.status WHEN 'running' THEN 0 ELSE 1 END, c.created_at DESC
        LIMIT ?`,
       [userId, limit]
+    );
+  }
+
+  static async findRunningWithUsers(limit = 50) {
+    return await dbAll(
+      `SELECT c.id,
+              c.user_id,
+              c.campaign_name,
+              c.status,
+              c.total_contacts,
+              c.sent_count,
+              c.failed_count,
+              c.started_at,
+              u.name as user_name,
+              u.email as user_email
+       FROM campaigns c
+       JOIN users u ON c.user_id = u.id
+       WHERE c.status = 'running'
+       ORDER BY c.started_at DESC, c.created_at DESC
+       LIMIT ?`,
+      [limit]
     );
   }
 
@@ -107,6 +130,13 @@ class CampaignModel {
       'UPDATE campaign_contacts SET status = ?, sent_at = CURRENT_TIMESTAMP, error_message = ? WHERE id = ?',
       [status, errorMessage, id]
     );
+  }
+
+  static async normalizeRunningToPending() {
+    const result = await dbRun(
+      "UPDATE campaigns SET status = 'pending' WHERE status = 'running'"
+    );
+    return result.changes || 0;
   }
 
   static async delete(id, userId) {

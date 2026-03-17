@@ -16,12 +16,28 @@
         <span>Credit Management</span>
       </div>
     </div>
-    <a href="/admin/logout" class="btn btn-sm" style="background:#1E3A5F; color:#94A3B8; border:none;">
-      <i class="fa-solid fa-right-from-bracket"></i> Logout
-    </a>
+    <div class="flex-center gap-12">
+      <span class="badge badge-warning" id="adminRunningBadge" style="display:none;">
+        <span class="dot orange"></span>
+        <span id="adminRunningCount">0</span> running
+      </span>
+      <span class="badge badge-secondary" id="adminStreamStateBadge">
+        <span class="dot red" id="adminStreamStateDot"></span>
+        <span id="adminStreamStateText">Offline</span>
+      </span>
+      <a href="/admin/logout" class="btn btn-sm" style="background:#1E3A5F; color:#94A3B8; border:none;">
+        <i class="fa-solid fa-right-from-bracket"></i> Logout
+      </a>
+    </div>
   </header>
+  <div id="adminGlobalRealtimeBanner" class="global-realtime-banner admin" style="display:none;"></div>
 
   <div class="admin-layout">
+    <div
+      id="realtimeAdminBootstrap"
+      data-stream-url="/realtime/admin/stream"
+      data-poll-url="/realtime/admin/poll"
+    ></div>
     <div class="admin-nav">
       <a href="/admin/dashboard" class="btn btn-outline btn-sm">
         <i class="fa-solid fa-gauge"></i> Dashboard
@@ -58,7 +74,7 @@
               <select name="userEmail" class="form-control" id="userSelect" required>
                 <option value="">-- Select a user --</option>
                 <% users.forEach(u => { %>
-                  <option value="<%= u.email %>" data-credits="<%= u.credits %>">
+                  <option value="<%= u.email %>" data-credits="<%= u.credits %>" data-user-id="<%= u.id %>">
                     <%= u.name %> (<%= u.email %>) — <%= u.credits %> credits
                   </option>
                 <% }) %>
@@ -132,13 +148,13 @@
                 </tr>
               <% } else { %>
                 <% users.forEach(u => { %>
-                  <tr>
+                  <tr data-admin-user-id="<%= u.id %>">
                     <td>
                       <div class="fw-600" style="font-size:13px;"><%= u.name %></div>
                       <div class="text-muted text-sm"><%= u.email %></div>
                     </td>
                     <td>
-                      <span class="fw-600"><%= u.credits.toLocaleString() %></span>
+                      <span class="fw-600" id="admin-add-user-credits-<%= u.id %>"><%= u.credits.toLocaleString() %></span>
                     </td>
                     <td>
                       <% if (u.credits === 0) { %>

@@ -16,12 +16,28 @@
         <span>System Management</span>
       </div>
     </div>
-    <a href="/admin/logout" class="btn btn-sm" style="background:#1E3A5F; color:#94A3B8; border:none;">
-      <i class="fa-solid fa-right-from-bracket"></i> Logout
-    </a>
+    <div class="flex-center gap-12">
+      <span class="badge badge-warning" id="adminRunningBadge" style="display:none;">
+        <span class="dot orange"></span>
+        <span id="adminRunningCount">0</span> running
+      </span>
+      <span class="badge badge-secondary" id="adminStreamStateBadge">
+        <span class="dot red" id="adminStreamStateDot"></span>
+        <span id="adminStreamStateText">Offline</span>
+      </span>
+      <a href="/admin/logout" class="btn btn-sm" style="background:#1E3A5F; color:#94A3B8; border:none;">
+        <i class="fa-solid fa-right-from-bracket"></i> Logout
+      </a>
+    </div>
   </header>
+  <div id="adminGlobalRealtimeBanner" class="global-realtime-banner admin" style="display:none;"></div>
 
   <div class="admin-layout">
+    <div
+      id="realtimeAdminBootstrap"
+      data-stream-url="/realtime/admin/stream"
+      data-poll-url="/realtime/admin/poll"
+    ></div>
     <div class="admin-nav">
       <a href="/admin/dashboard" class="btn btn-primary btn-sm">
         <i class="fa-solid fa-gauge"></i> Dashboard
@@ -48,21 +64,21 @@
         <div class="stat-card-header">
           <div class="stat-card-icon blue"><i class="fa-solid fa-users"></i></div>
         </div>
-        <h3><%= users.length %></h3>
+        <h3 id="admin-total-users"><%= users.length %></h3>
         <p>Total Users</p>
       </div>
       <div class="stat-card">
         <div class="stat-card-header">
           <div class="stat-card-icon green"><i class="fa-solid fa-receipt"></i></div>
         </div>
-        <h3><%= totalTransactions %></h3>
+        <h3 id="admin-total-transactions"><%= totalTransactions %></h3>
         <p>Credit Transactions</p>
       </div>
       <div class="stat-card">
         <div class="stat-card-header">
           <div class="stat-card-icon purple"><i class="fa-solid fa-message"></i></div>
         </div>
-        <h3><%= totalMessages %></h3>
+        <h3 id="admin-total-messages"><%= totalMessages %></h3>
         <p>Messages Sent</p>
       </div>
     </div>
@@ -93,12 +109,12 @@
                 </tr>
               <% } else { %>
                 <% users.forEach(u => { %>
-                  <tr>
+                  <tr data-admin-user-id="<%= u.id %>">
                     <td class="fw-600"><%= u.name %></td>
                     <td class="text-muted"><%= u.email %></td>
                     <td>
                       <span class="badge <%= u.credits > 0 ? 'badge-success' : 'badge-danger' %>">
-                        <i class="fa-solid fa-coins"></i> <%= u.credits %>
+                        <i class="fa-solid fa-coins"></i> <span id="admin-user-credits-<%= u.id %>"><%= u.credits %></span>
                       </span>
                     </td>
                     <td>

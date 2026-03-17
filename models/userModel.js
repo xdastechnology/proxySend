@@ -1,5 +1,6 @@
 // models/userModel.js
 const { dbRun, dbGet, dbAll } = require('../config/database');
+const { publishUserUpdate, publishAdminUpdate } = require('../services/realtimeService');
 
 class UserModel {
   static async findByEmail(email) {
@@ -23,6 +24,16 @@ class UserModel {
       'UPDATE users SET credits = credits + ? WHERE id = ?',
       [creditsToAdd, userId]
     );
+
+    publishUserUpdate(userId, 'credits_updated', {
+      source: 'admin_topup',
+      creditsAdded: Number(creditsToAdd) || 0,
+    });
+    publishAdminUpdate('credits_updated', {
+      userId: Number(userId),
+      source: 'admin_topup',
+      creditsAdded: Number(creditsToAdd) || 0,
+    });
   }
 
   static async deductCredit(userId) {
@@ -30,6 +41,16 @@ class UserModel {
       'UPDATE users SET credits = credits - 1 WHERE id = ? AND credits > 0',
       [userId]
     );
+
+    if (result.changes > 0) {
+      publishUserUpdate(userId, 'credits_updated', { source: 'campaign_send', delta: -1 });
+      publishAdminUpdate('credits_updated', {
+        userId: Number(userId),
+        source: 'campaign_send',
+        delta: -1,
+      });
+    }
+
     return result.changes > 0;
   }
 

@@ -13,6 +13,7 @@
   <div class="main-content">
     <%- include('partials/topbar', { pageTitle: 'Credits', pageSubtitle: 'View your credit balance and history' }) %>
     <main class="page-content">
+      <div id="creditsRealtimeRoot" data-page="credits"></div>
 
       <!-- Credit Balance -->
       <div class="two-col mb-24">
@@ -21,24 +22,26 @@
             <div style="margin-bottom:12px;">
               <i class="fa-solid fa-coins" style="font-size:48px; color:var(--primary);"></i>
             </div>
-            <h2 style="font-size:48px; font-weight:700; color:var(--text); margin-bottom:4px;">
+            <h2 id="creditsBalanceValue" style="font-size:48px; font-weight:700; color:var(--text); margin-bottom:4px;">
               <%= credits.toLocaleString() %>
             </h2>
             <p class="text-muted">Credits Available</p>
             <div style="margin-top:20px;" class="flex-center gap-8" style="justify-content:center;">
-              <% if (credits === 0) { %>
-                <span class="badge badge-danger" style="font-size:13px; padding: 6px 16px;">
-                  <i class="fa-solid fa-circle-xmark"></i> No Credits
-                </span>
-              <% } else if (credits < 20) { %>
-                <span class="badge badge-warning" style="font-size:13px; padding: 6px 16px;">
-                  <i class="fa-solid fa-triangle-exclamation"></i> Low Balance
-                </span>
-              <% } else { %>
-                <span class="badge badge-success" style="font-size:13px; padding: 6px 16px;">
-                  <i class="fa-solid fa-circle-check"></i> Active
-                </span>
-              <% } %>
+              <span id="creditsBalanceBadge">
+                <% if (credits === 0) { %>
+                  <span class="badge badge-danger" style="font-size:13px; padding: 6px 16px;">
+                    <i class="fa-solid fa-circle-xmark"></i> No Credits
+                  </span>
+                <% } else if (credits < 20) { %>
+                  <span class="badge badge-warning" style="font-size:13px; padding: 6px 16px;">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Low Balance
+                  </span>
+                <% } else { %>
+                  <span class="badge badge-success" style="font-size:13px; padding: 6px 16px;">
+                    <i class="fa-solid fa-circle-check"></i> Active
+                  </span>
+                <% } %>
+              </span>
             </div>
           </div>
         </div>

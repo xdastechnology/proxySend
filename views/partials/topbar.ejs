@@ -6,9 +6,24 @@
     <% } %>
   </div>
   <div class="topbar-right">
-    <div class="credits-badge">
+    <div class="connection-indicator disconnected compact" id="globalTopbarConnectionIndicator">
+      <span class="dot red" id="globalTopbarConnectionDot"></span>
+      <span id="globalTopbarConnectionText">Disconnected</span>
+    </div>
+    <div class="credits-badge" id="globalCreditsBadge">
       <i class="fa-solid fa-coins"></i>
-      <%= user ? user.credits : 0 %> Credits
+      <span id="globalCreditsValue"><%= user ? user.credits : 0 %></span> Credits
+      <span class="badge badge-warning global-running-badge" id="globalRunningBadge" style="display:none;">
+        <span class="dot orange"></span>
+        <span id="globalRunningCount">0</span> Running
+      </span>
     </div>
   </div>
 </header>
+<div id="globalRealtimeBanner" class="global-realtime-banner" style="display:none;"></div>
+<div
+  id="realtimeUserBootstrap"
+  data-stream-url="/realtime/stream"
+  data-poll-url="/dashboard/realtime"
+  data-initial-credits="<%= user ? user.credits : 0 %>"
+></div>

@@ -13,6 +13,7 @@
   <div class="main-content">
     <%- include('partials/topbar', { pageTitle: 'Campaigns', pageSubtitle: 'Create and manage messaging campaigns' }) %>
     <main class="page-content">
+      <div id="campaignsRealtimeRoot" data-page="campaigns"></div>
 
       <% if (error) { %>
         <div class="alert alert-danger" data-auto-dismiss>
@@ -61,9 +62,9 @@
                   <th>Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="campaignsTableBody">
                 <% safeCampaigns.forEach(campaign => { %>
-                  <tr>
+                  <tr data-campaign-id="<%= campaign.id %>">
                     <td>
                       <a href="/campaigns/details/<%= campaign.id %>" style="font-weight:600;color:var(--text);">
                         <%= campaign.campaign_name %>
@@ -78,24 +79,27 @@
                     <td><%= campaign.total_contacts %></td>
                     <td style="min-width:120px;">
                       <div class="flex-center gap-8">
-                        <span class="text-sm"><%= campaign.sent_count %>/<%= campaign.total_contacts %></span>
+                        <span class="text-sm" id="campaign-progress-text-<%= campaign.id %>"><%= campaign.sent_count %>/<%= campaign.total_contacts %></span>
                       </div>
                       <% const pct = campaign.total_contacts > 0 ? Math.round((campaign.sent_count / campaign.total_contacts) * 100) : 0; %>
                       <div class="progress">
                         <div
+                          id="campaign-progress-bar-<%= campaign.id %>"
                           class="progress-bar <%= campaign.status === 'completed' ? 'success' : '' %>"
                           style="width:<%= pct %>%"
                         ></div>
                       </div>
                     </td>
                     <td>
-                      <% if (campaign.status === 'completed') { %>
-                        <span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Completed</span>
-                      <% } else if (campaign.status === 'running') { %>
-                        <span class="badge badge-warning"><span class="dot orange"></span> Running</span>
-                      <% } else { %>
-                        <span class="badge badge-secondary"><i class="fa-solid fa-clock"></i> Pending</span>
-                      <% } %>
+                      <span id="campaign-status-badge-<%= campaign.id %>">
+                        <% if (campaign.status === 'completed') { %>
+                          <span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Completed</span>
+                        <% } else if (campaign.status === 'running') { %>
+                          <span class="badge badge-warning"><span class="dot orange"></span> Running</span>
+                        <% } else { %>
+                          <span class="badge badge-secondary"><i class="fa-solid fa-clock"></i> Pending</span>
+                        <% } %>
+                      </span>
                     </td>
                     <td class="text-muted text-sm"><%= new Date(campaign.created_at).toLocaleDateString() %></td>
                     <td>
