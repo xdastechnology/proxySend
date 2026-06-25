@@ -299,7 +299,7 @@ async function runCampaign(campaignId, userId) {
           credits: user.credits - 1,
         });
 
-        await sleep(randomDelay(5, 10));
+        await sleep(randomDelay(5, 20));
       } else {
         // Mark as failed
         await query(
@@ -323,7 +323,7 @@ async function runCampaign(campaignId, userId) {
         sseService.broadcastToCampaign(campaignId, 'campaign_update', updatedRows[0]);
         sseService.broadcastToUser(userId, 'campaign_update', updatedRows[0]);
 
-        await sleep(randomDelay(2, 4));
+        await sleep(randomDelay(5, 20));
       }
     }
 
