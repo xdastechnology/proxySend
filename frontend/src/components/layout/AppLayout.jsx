@@ -22,7 +22,7 @@ export default function AppLayout() {
   const location = useLocation();
 
   const title = pageTitles[location.pathname] ||
-    (location.pathname.startsWith('/campaigns/') ? 'Campaign Detail' : 'Proxy Send');
+    (location.pathname.startsWith('/campaigns/') ? 'Campaign Detail' : 'Feelaxo');
 
   useSSE('/api/sse/user', {
     events: {

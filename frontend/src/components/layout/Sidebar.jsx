@@ -58,7 +58,7 @@ export default function Sidebar({ open, onClose }) {
             <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0">
               <MessageSquare className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-surface-900 text-base tracking-tight">Proxy Send</span>
+            <span className="font-bold text-surface-900 text-base tracking-tight">Feelaxo</span>
           </div>
           <button
             onClick={onClose}

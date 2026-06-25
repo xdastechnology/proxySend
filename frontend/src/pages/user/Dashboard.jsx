@@ -104,7 +104,7 @@ export default function Dashboard() {
           Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},{' '}
           {user?.name?.split(' ')[0]} 👋
         </h1>
-        <p className="text-sm text-surface-500 mt-1">Here's your Proxy Send overview</p>
+        <p className="text-sm text-surface-500 mt-1">Here's your Feelaxo overview</p>
       </div>
 
       {/* WhatsApp Status Banner */}

@@ -41,7 +41,7 @@ export default function AdminLogin() {
             <Shield className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-surface-900">Admin Access</h1>
-          <p className="text-sm text-surface-500 mt-1">Proxy Send Administration</p>
+          <p className="text-sm text-surface-500 mt-1">Feelaxo Administration</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-surface-200 p-6 shadow-sm">

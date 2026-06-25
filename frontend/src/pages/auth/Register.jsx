@@ -49,7 +49,7 @@ export default function Register() {
             <MessageSquare className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-surface-900">Create account</h1>
-          <p className="text-sm text-surface-500 mt-1">Join Proxy Send today</p>
+          <p className="text-sm text-surface-500 mt-1">Join Feelaxo today</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-surface-100 shadow-card p-6">
@@ -109,7 +109,7 @@ export default function Register() {
             <Input
               label="Reference code" name="referenceCode" type="text"
               value={form.referenceCode} onChange={(e) => setForm({ ...form, referenceCode: e.target.value.toUpperCase() })}
-              placeholder="PROXYSEND" required
+              placeholder="FEELAXO" required
               error={fieldErrors.referenceCode}
               hint="Use an active seller reference code"
             />

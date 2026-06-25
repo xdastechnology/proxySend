@@ -56,7 +56,7 @@ export default function AdminLayout() {
               <Shield className="w-4 h-4 text-white" />
             </div>
             <div>
-              <span className="font-bold text-surface-900 text-sm">Proxy Send</span>
+              <span className="font-bold text-surface-900 text-sm">Feelaxo</span>
               <p className="text-xs text-surface-400">Admin Panel</p>
             </div>
           </div>

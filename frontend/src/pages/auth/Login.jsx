@@ -37,7 +37,7 @@ export default function Login() {
             <MessageSquare className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-surface-900">Welcome back</h1>
-          <p className="text-sm text-surface-500 mt-1">Sign in to Proxy Send</p>
+          <p className="text-sm text-surface-500 mt-1">Sign in to Feelaxo</p>
         </div>
 
         {/* Form */}
