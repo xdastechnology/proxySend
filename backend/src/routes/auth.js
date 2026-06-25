@@ -29,26 +29,11 @@ router.post(
       if (val !== req.body.password) throw new Error('Passwords do not match');
       return true;
     }),
-    body('referenceCode').trim().notEmpty().withMessage('Reference code is required'),
   ],
   validate,
   async (req, res, next) => {
     try {
-      const { name, email, phone, password, referenceCode } = req.body;
-
-      // Check reference code
-      const { rows: refRows } = await query(
-        `SELECT rc.*, s.id as seller_id
-         FROM reference_codes rc
-         JOIN sellers s ON s.id = rc.seller_id
-         WHERE rc.code = $1 AND rc.is_active = TRUE AND s.is_active = TRUE`,
-        [referenceCode.toUpperCase()]
-      );
-      const refCode = refRows[0];
-
-      if (!refCode) {
-        return res.status(400).json({ error: 'Invalid or inactive seller reference code' });
-      }
+      const { name, email, phone, password } = req.body;
 
       // Check duplicate email
       const { rows: emailRows } = await query('SELECT id FROM users WHERE email = $1', [email]);
@@ -72,13 +57,13 @@ router.post(
 
       // Create user
       const { rows: insertRows } = await query(
-        'INSERT INTO users (name, email, phone, password_hash, reference_code_id, seller_id, credits, is_active) VALUES ($1, $2, $3, $4, $5, $6, 0, TRUE) RETURNING id',
-        [name, email, normalizedPhone, passwordHash, refCode.id, refCode.seller_id]
+        'INSERT INTO users (name, email, phone, password_hash, credits, is_active) VALUES ($1, $2, $3, $4, 0, TRUE) RETURNING id',
+        [name, email, normalizedPhone, passwordHash]
       );
       const userId = insertRows[0].id;
 
       const { rows: userRows } = await query(
-        'SELECT id, name, email, phone, credits, wa_status, seller_id, is_active FROM users WHERE id = $1',
+        'SELECT id, name, email, phone, credits, wa_status, is_active FROM users WHERE id = $1',
         [userId]
       );
       const user = userRows[0];
@@ -165,64 +150,11 @@ router.post(
       return res.status(401).json({ error: 'Invalid admin password' });
     }
     req.session.userId = null;
-    req.session.sellerId = null;
     req.session.isAdmin = true;
     req.session.save((err) => {
       if (err) return res.status(500).json({ error: 'Session error' });
       res.json({ success: true });
     });
-  }
-);
-
-// Seller login
-router.post(
-  '/seller/login',
-  [
-    body('email').trim().isEmail().withMessage('Valid email required').normalizeEmail(),
-    body('password').notEmpty().withMessage('Password is required'),
-  ],
-  validate,
-  async (req, res, next) => {
-    try {
-      const { email, password } = req.body;
-
-      const { rows } = await query('SELECT * FROM sellers WHERE email = $1', [email]);
-      const seller = rows[0];
-
-      if (!seller) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      if (!seller.is_active) {
-        return res.status(403).json({ error: 'Seller account is deactivated' });
-      }
-
-      const valid = await bcrypt.compare(password, seller.password_hash);
-      if (!valid) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      req.session.userId = null;
-      req.session.isAdmin = false;
-      req.session.sellerId = seller.id;
-      req.session.save((err) => {
-        if (err) return next(err);
-        res.json({
-          seller: {
-            id: seller.id,
-            name: seller.name,
-            email: seller.email,
-            phone: seller.phone,
-            commission_pct: seller.commission_pct,
-            is_active: seller.is_active,
-          },
-        });
-      });
-
-      logger.info({ sellerId: seller.id }, 'Seller logged in');
-    } catch (err) {
-      next(err);
-    }
   }
 );
 
@@ -242,7 +174,7 @@ router.get('/me', async (req, res, next) => {
   }
   try {
     const { rows } = await query(
-      'SELECT id, name, email, phone, credits, wa_status, created_at, seller_id, is_active FROM users WHERE id = $1',
+      'SELECT id, name, email, phone, credits, wa_status, created_at, is_active FROM users WHERE id = $1',
       [req.session.userId]
     );
     const user = rows[0];
@@ -250,29 +182,6 @@ router.get('/me', async (req, res, next) => {
       return res.status(401).json({ error: 'User not found' });
     }
     res.json({ user });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Seller me
-router.get('/seller/me', async (req, res, next) => {
-  if (!req.session?.sellerId) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  try {
-    const { rows } = await query(
-      'SELECT id, name, email, phone, commission_pct, is_active, created_at FROM sellers WHERE id = $1',
-      [req.session.sellerId]
-    );
-    const seller = rows[0];
-    if (!seller) {
-      return res.status(401).json({ error: 'Seller not found' });
-    }
-    if (!seller.is_active) {
-      return res.status(403).json({ error: 'Seller account is deactivated' });
-    }
-    res.json({ seller });
   } catch (err) {
     next(err);
   }

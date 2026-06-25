@@ -8,7 +8,7 @@ import Alert from '../../components/ui/Alert';
 
 export default function Register() {
   const [form, setForm] = useState({
-    name: '', email: '', phone: '', password: '', confirmPassword: '', referenceCode: ''
+    name: '', email: '', phone: '', password: '', confirmPassword: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -106,13 +106,6 @@ export default function Register() {
               error={fieldErrors.confirmPassword}
               autoComplete="new-password"
             />
-            <Input
-              label="Reference code" name="referenceCode" type="text"
-              value={form.referenceCode} onChange={(e) => setForm({ ...form, referenceCode: e.target.value.toUpperCase() })}
-              placeholder="FEELAXO" required
-              error={fieldErrors.referenceCode}
-              hint="Use an active seller reference code"
-            />
 
             <Button type="submit" fullWidth loading={loading} size="lg" className="mt-2">
               Create account
@@ -125,9 +118,6 @@ export default function Register() {
           <Link to="/login" className="text-brand-600 font-medium hover:underline">
             Sign in
           </Link>
-        </p>
-        <p className="text-center text-xs text-surface-400 mt-2">
-          <Link to="/seller/login" className="hover:text-surface-600">Seller login</Link>
         </p>
       </div>
     </div>

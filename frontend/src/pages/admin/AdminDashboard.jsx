@@ -136,7 +136,7 @@ export default function AdminDashboard() {
           )}
         </Card>
 
-        {/* Transactions */}
+        {/* Recent Transactions */}
         <Card>
           <CardHeader>
             <CardTitle>Recent Transactions</CardTitle>
@@ -165,51 +165,6 @@ export default function AdminDashboard() {
           )}
         </Card>
       </div>
-
-      {/* Reference Codes */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Reference Codes</CardTitle>
-          <Link to="/admin/manage">
-            <Button size="xs" variant="ghost" iconRight={<ArrowRight className="w-3 h-3" />}>
-              Manage
-            </Button>
-          </Link>
-        </CardHeader>
-        {loading ? (
-          <div className="flex justify-center py-8"><Spinner className="text-brand-500" /></div>
-        ) : !data?.referenceCodes?.length ? (
-          <EmptyState icon={<CreditCard className="w-6 h-6" />} title="No reference codes" />
-        ) : (
-          <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-surface-100">
-                  {['Code', '₹/Message', 'Users', 'Status'].map(h => (
-                    <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-surface-500 uppercase tracking-wide">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-50">
-                {data.referenceCodes.map(rc => (
-                  <tr key={rc.id} className="hover:bg-surface-50 transition-colors">
-                    <td className="px-3 py-3 font-mono font-bold text-brand-700">{rc.code}</td>
-                    <td className="px-3 py-3 text-surface-700">₹{rc.inr_per_message}</td>
-                    <td className="px-3 py-3 text-surface-700">{rc.user_count}</td>
-                    <td className="px-3 py-3">
-                      <Badge variant={rc.is_active ? 'green' : 'default'} dot>
-                        {rc.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
 
       {/* Pending Credit Requests */}
       {data?.pendingCreditRequests?.length > 0 && (

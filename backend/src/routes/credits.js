@@ -3,6 +3,7 @@ const { body } = require('express-validator');
 const { query } = require('../db');
 const { requireUser } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
+const config = require('../config');
 
 const router = express.Router();
 router.use(requireUser);
@@ -74,22 +75,12 @@ router.post(
         });
       }
 
-      // Get user reference code price and seller ownership
-      const { rows: userRefRows } = await query(
-        `SELECT rc.inr_per_message, u.seller_id
-         FROM users u
-         JOIN reference_codes rc ON rc.id = u.reference_code_id
-         WHERE u.id = $1`,
-        [userId]
-      );
-      const userRef = userRefRows[0];
-
       const { rows: insertRows } = await query(
         `INSERT INTO credit_requests
-          (user_id, seller_id, requested_credits, status, note, inr_per_message)
-         VALUES ($1, $2, $3, 'pending', $4, $5)
+          (user_id, requested_credits, status, note)
+         VALUES ($1, $2, 'pending', $3)
          RETURNING id`,
-        [userId, userRef?.seller_id || null, requestedCredits, note || null, userRef?.inr_per_message || null]
+        [userId, requestedCredits, note || null]
       );
 
       const { rows } = await query(

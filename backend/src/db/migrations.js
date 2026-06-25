@@ -274,6 +274,27 @@ const migrations = [
       await query(`CREATE INDEX IF NOT EXISTS idx_credit_transactions_seller_settlement_created ON credit_transactions(seller_id, settlement_status, created_at DESC)`);
     },
   },
+  {
+    version: 6,
+    name: 'remove_resellers_and_reference_codes',
+    up: async () => {
+      await query(`DROP TABLE IF EXISTS seller_settlements CASCADE`);
+      await query(`DROP TABLE IF EXISTS reference_codes CASCADE`);
+      await query(`DROP TABLE IF EXISTS sellers CASCADE`);
+      await query(`ALTER TABLE users DROP COLUMN IF EXISTS reference_code_id CASCADE`);
+      await query(`ALTER TABLE users DROP COLUMN IF EXISTS seller_id CASCADE`);
+      await query(`ALTER TABLE credit_requests DROP COLUMN IF EXISTS seller_id CASCADE`);
+      await query(`ALTER TABLE credit_requests DROP COLUMN IF EXISTS inr_per_message CASCADE`);
+      await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS seller_id CASCADE`);
+      await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS price_per_message CASCADE`);
+      await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS gross_amount CASCADE`);
+      await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS admin_commission_amount CASCADE`);
+      await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS seller_net_amount CASCADE`);
+      await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS settlement_status CASCADE`);
+      await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS settled_at CASCADE`);
+      await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS settlement_note CASCADE`);
+    },
+  },
 ];
 
 async function runMigrations() {

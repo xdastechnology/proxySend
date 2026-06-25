@@ -8,6 +8,7 @@ const config = {
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
   logLevel: process.env.LOG_LEVEL || 'info',
   maxUploadSizeMb: parseInt(process.env.MAX_UPLOAD_SIZE_MB || '25', 10),
+  pricePerMessage: parseFloat(process.env.PRICE_PER_MESSAGE || '1.63'),
 };
 
 module.exports = config;

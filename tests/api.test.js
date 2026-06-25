@@ -30,16 +30,11 @@ beforeAll(async () => {
       wa_auth_keys, wa_auth_creds,
       message_logs, credit_requests, credit_transactions,
       campaign_contacts, campaigns, templates, contacts,
-      users, reference_codes
+      users, sellers, reference_codes, seller_settlements
     CASCADE
   `);
 
   await runMigrations();
-
-  // Seed a test reference code
-  await query(
-    "INSERT INTO reference_codes (code, inr_per_message, is_active) VALUES ('TESTCODE', 0.5, TRUE) ON CONFLICT (code) DO NOTHING"
-  );
 
   // Load app
   const express = require('express');
@@ -79,22 +74,7 @@ afterAll(async () => {
 // ─── AUTH TESTS ─────────────────────────────────────────────────────────────
 
 describe('Authentication', () => {
-  test('POST /api/auth/register - fails with invalid reference code', async () => {
-    const res = await request(app)
-      .post('/api/auth/register')
-      .send({
-        name: 'Test User',
-        email: 'test@test.com',
-        phone: '9876543210',
-        password: 'Test@1234',
-        confirmPassword: 'Test@1234',
-        referenceCode: 'INVALID',
-      });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/invalid/i);
-  });
-
-  test('POST /api/auth/register - succeeds with valid reference code', async () => {
+  test('POST /api/auth/register - succeeds with valid registration payload', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({
@@ -103,7 +83,6 @@ describe('Authentication', () => {
         phone: '9876543210',
         password: 'Test@1234',
         confirmPassword: 'Test@1234',
-        referenceCode: 'TESTCODE',
       });
     expect(res.status).toBe(201);
     expect(res.body.user).toBeDefined();
@@ -119,7 +98,6 @@ describe('Authentication', () => {
         phone: '9876543211',
         password: 'Test@1234',
         confirmPassword: 'Test@1234',
-        referenceCode: 'TESTCODE',
       });
     expect(res.status).toBe(409);
   });
@@ -393,7 +371,6 @@ describe('Admin', () => {
     expect(res.status).toBe(200);
     expect(res.body.stats).toBeDefined();
     expect(res.body.users).toBeDefined();
-    expect(res.body.referenceCodes).toBeDefined();
   });
 
   test('GET /api/admin/dashboard - rejects unauthenticated request', async () => {
@@ -420,31 +397,7 @@ describe('Admin', () => {
     expect(res.status).toBe(404);
   });
 
-  test('POST /api/admin/reference-codes - creates reference code', async () => {
-    const res = await adminAgent.post('/api/admin/reference-codes').send({
-      code: 'NEWCODE2024',
-      inrPerMessage: 1.0,
-      marketingMessage: 'Test message',
-    });
-    expect(res.status).toBe(201);
-    expect(res.body.referenceCode.code).toBe('NEWCODE2024');
-  });
-
-  test('POST /api/admin/reference-codes - rejects duplicate code', async () => {
-    const res = await adminAgent.post('/api/admin/reference-codes').send({
-      code: 'TESTCODE',
-      inrPerMessage: 0.5,
-    });
-    expect(res.status).toBe(409);
-  });
-
-  test('PATCH /api/admin/reference-codes/:id/toggle - toggles status', async () => {
-    const dashRes = await adminAgent.get('/api/admin/dashboard');
-    const code = dashRes.body.referenceCodes.find(rc => rc.code === 'NEWCODE2024');
-    const res = await adminAgent.patch(`/api/admin/reference-codes/${code.id}/toggle`);
-    expect(res.status).toBe(200);
-    expect(typeof res.body.isActive).toBe('boolean');
-  });
+  // Reference code tests removed
 
   test('PATCH /api/admin/credit-requests/:id - approves credit request', async () => {
     const reqRes = await adminAgent.get('/api/admin/credit-requests?status=pending');

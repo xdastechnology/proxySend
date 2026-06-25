@@ -2,6 +2,7 @@ const { query } = require('../db');
 const logger = require('../utils/logger');
 const waService = require('./whatsapp');
 const sseService = require('./sse');
+const config = require('../config');
 
 // Running campaign flags
 const runningCampaigns = new Set();
@@ -153,12 +154,8 @@ async function runCampaign(campaignId, userId) {
 
       // Check customer status and credits
       const { rows: userRows } = await query(
-        `SELECT u.credits, u.is_active, u.seller_id,
-                COALESCE(rc.inr_per_message, 0) as inr_per_message,
-                COALESCE(s.commission_pct, 0) as commission_pct
+        `SELECT u.credits, u.is_active
          FROM users u
-         LEFT JOIN reference_codes rc ON rc.id = u.reference_code_id
-         LEFT JOIN sellers s ON s.id = u.seller_id
          WHERE u.id = $1`,
         [userId]
       );
@@ -243,11 +240,7 @@ async function runCampaign(campaignId, userId) {
       const now = new Date().toISOString();
 
       if (sendResult.success) {
-        const pricePerMessage = Number(user.inr_per_message || 0);
-        const commissionPct = Number(user.commission_pct || 0);
-        const grossAmount = pricePerMessage;
-        const adminCommissionAmount = Number((grossAmount * commissionPct).toFixed(6));
-        const sellerNetAmount = Number((grossAmount - adminCommissionAmount).toFixed(6));
+        const pricePerMessage = config.pricePerMessage;
 
         // Mark as sent
         await query(
@@ -264,17 +257,12 @@ async function runCampaign(campaignId, userId) {
         // Log transaction
         await query(
           `INSERT INTO credit_transactions
-            (user_id, seller_id, amount, type, note, campaign_id, price_per_message, gross_amount, admin_commission_amount, seller_net_amount)
-           VALUES ($1, $2, -1, 'campaign_send', $3, $4, $5, $6, $7, $8)`,
+            (user_id, amount, type, note, campaign_id)
+           VALUES ($1, -1, 'campaign_send', $2, $3)`,
           [
             userId,
-            user.seller_id || null,
             `Sent to ${contact.phone} in campaign ${campaign.campaign_name}`,
             campaignId,
-            pricePerMessage,
-            grossAmount,
-            adminCommissionAmount,
-            sellerNetAmount,
           ]
         );
 

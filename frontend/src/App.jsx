@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AppLayout from './components/layout/AppLayout';
 import AdminLayout from './components/admin/AdminLayout';
-import SellerLayout from './components/seller/SellerLayout';
 import Spinner from './components/ui/Spinner';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -17,41 +16,18 @@ import Profile from './pages/user/Profile';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminManage from './pages/admin/AdminManage';
-import SellerLogin from './pages/seller/SellerLogin';
-import SellerDashboard from './pages/seller/SellerDashboard';
-import SellerCustomers from './pages/seller/SellerCustomers';
-import SellerReferenceCodes from './pages/seller/SellerReferenceCodes';
-import SellerCreditRequests from './pages/seller/SellerCreditRequests';
 
 function PrivateRoute({ children }) {
-  const { user, seller, loading } = useAuth();
+  const { user, loading } = useAuth();
   if (loading) return <FullPageSpinner />;
-  if (seller && !user) return <Navigate to="/seller/dashboard" replace />;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
 
 function PublicRoute({ children }) {
-  const { user, seller, loading } = useAuth();
-  if (loading) return <FullPageSpinner />;
-  if (seller) return <Navigate to="/seller/dashboard" replace />;
-  if (user) return <Navigate to="/dashboard" replace />;
-  return children;
-}
-
-function SellerRoute({ children }) {
-  const { user, seller, loading } = useAuth();
-  if (loading) return <FullPageSpinner />;
-  if (user && !seller) return <Navigate to="/dashboard" replace />;
-  if (!seller) return <Navigate to="/seller/login" replace />;
-  return children;
-}
-
-function SellerPublicRoute({ children }) {
-  const { user, seller, loading } = useAuth();
+  const { user, loading } = useAuth();
   if (loading) return <FullPageSpinner />;
   if (user) return <Navigate to="/dashboard" replace />;
-  if (seller) return <Navigate to="/seller/dashboard" replace />;
   return children;
 }
 
@@ -60,7 +36,7 @@ function FullPageSpinner() {
     <div className="min-h-screen flex items-center justify-center bg-surface-50">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 rounded-2xl bg-brand-500 flex items-center justify-center">
-          <span className="text-white font-bold text-lg">P</span>
+          <span className="text-white font-bold text-lg">F</span>
         </div>
         <Spinner size="md" className="text-brand-500" />
       </div>
@@ -75,7 +51,6 @@ export default function App() {
         {/* Public */}
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-        <Route path="/seller/login" element={<SellerPublicRoute><SellerLogin /></SellerPublicRoute>} />
 
         {/* Admin */}
         <Route path="/admin/login" element={<AdminLogin />} />
@@ -103,22 +78,6 @@ export default function App() {
           <Route path="campaigns/:id" element={<CampaignDetail />} />
           <Route path="credits" element={<Credits />} />
           <Route path="profile" element={<Profile />} />
-        </Route>
-
-        {/* Seller */}
-        <Route
-          path="/seller"
-          element={
-            <SellerRoute>
-              <SellerLayout />
-            </SellerRoute>
-          }
-        >
-          <Route index element={<Navigate to="/seller/dashboard" replace />} />
-          <Route path="dashboard" element={<SellerDashboard />} />
-          <Route path="customers" element={<SellerCustomers />} />
-          <Route path="reference-codes" element={<SellerReferenceCodes />} />
-          <Route path="credit-requests" element={<SellerCreditRequests />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
