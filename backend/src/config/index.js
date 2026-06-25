@@ -1,6 +1,6 @@
 const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT || '3001', 10),
+  port: parseInt(process.env.PORT || '3008', 10),
   sessionSecret: process.env.SESSION_SECRET || 'proxysend-dev-secret-change-in-prod',
   adminPassword: process.env.ADMIN_PASSWORD,
   databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/proxysend',
