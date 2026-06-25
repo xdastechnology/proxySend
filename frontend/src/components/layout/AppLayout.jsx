@@ -14,6 +14,7 @@ const pageTitles = {
   '/campaigns': 'Campaigns',
   '/credits': 'Credits & Billing',
   '/profile': 'Profile',
+  '/how-to-use': 'How to Use',
 };
 
 export default function AppLayout() {

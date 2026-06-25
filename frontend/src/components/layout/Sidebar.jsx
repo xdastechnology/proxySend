@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, MessageSquare, Users, FileText,
-  Megaphone, CreditCard, User, LogOut, X, Wifi
+  Megaphone, CreditCard, User, LogOut, X, Wifi, HelpCircle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Badge from '../ui/Badge';
@@ -15,6 +15,7 @@ const navItems = [
   { to: '/campaigns', icon: Megaphone, label: 'Campaigns' },
   { to: '/credits', icon: CreditCard, label: 'Credits' },
   { to: '/profile', icon: User, label: 'Profile' },
+  { to: '/how-to-use', icon: HelpCircle, label: 'How to Use' },
 ];
 
 export default function Sidebar({ open, onClose }) {

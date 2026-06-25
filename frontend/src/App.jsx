@@ -13,6 +13,7 @@ import Campaigns from './pages/user/Campaigns';
 import CampaignDetail from './pages/user/CampaignDetail';
 import Credits from './pages/user/Credits';
 import Profile from './pages/user/Profile';
+import HowToUse from './pages/user/HowToUse';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminManage from './pages/admin/AdminManage';
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="campaigns/:id" element={<CampaignDetail />} />
           <Route path="credits" element={<Credits />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="how-to-use" element={<HowToUse />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
