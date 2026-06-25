@@ -65,6 +65,13 @@ export const contactsApi = {
     api.get('/contacts/export/csv', { responseType: 'blob' }),
 };
 
+// Groups
+export const groupsApi = {
+  list: () => api.get('/contacts/groups'),
+  create: (data) => api.post('/contacts/groups', data),
+  delete: (id) => api.delete(`/contacts/groups/${id}`),
+};
+
 // Templates
 export const templatesApi = {
   list: () => api.get('/templates'),

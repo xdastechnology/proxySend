@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Megaphone, Plus, Play, Trash2, ArrowRight, Search } from 'lucide-react';
-import { campaignsApi, templatesApi, contactsApi } from '../../lib/api';
+import { campaignsApi, templatesApi, contactsApi, groupsApi } from '../../lib/api';
 import { useSSE } from '../../hooks/useSSE';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -25,7 +25,9 @@ export default function Campaigns() {
 
   const [templates, setTemplates] = useState([]);
   const [contacts, setContacts] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [contactSearch, setContactSearch] = useState('');
+  const [selectedFilterGroupId, setSelectedFilterGroupId] = useState('');
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [form, setForm] = useState({ campaignName: '', templateId: '' });
   const [formError, setFormError] = useState('');
@@ -62,9 +64,10 @@ export default function Campaigns() {
   const loadCreateResources = async () => {
     setFormResourcesLoading(true);
     try {
-      const [tmplRes, ctRes] = await Promise.allSettled([
+      const [tmplRes, ctRes, grpRes] = await Promise.allSettled([
         templatesApi.list(),
-        contactsApi.picker({ limit: 500 }),
+        contactsApi.picker({ limit: 1000 }),
+        groupsApi.list(),
       ]);
 
       if (tmplRes.status === 'fulfilled') {
@@ -80,6 +83,12 @@ export default function Campaigns() {
         setContacts([]);
         setAlert({ type: 'error', msg: ctRes.reason?.response?.data?.error || 'Failed to load contacts (request timed out)' });
       }
+
+      if (grpRes.status === 'fulfilled') {
+        setGroups(grpRes.value.data.groups || []);
+      } else {
+        setGroups([]);
+      }
     } finally {
       setFormResourcesLoading(false);
     }
@@ -91,6 +100,7 @@ export default function Campaigns() {
       setForm({ campaignName: '', templateId: '' });
       setSelectedContacts([]);
       setContactSearch('');
+      setSelectedFilterGroupId('');
       setFormError('');
       setFormOpen(true);
       await loadCreateResources();
@@ -102,11 +112,16 @@ export default function Campaigns() {
     }
   };
 
-  const filteredContacts = contacts.filter(c =>
-    !contactSearch ||
-    c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
-    c.phone.includes(contactSearch)
-  );
+  const filteredContacts = contacts.filter(c => {
+    const matchesSearch = !contactSearch ||
+      c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+      c.phone.includes(contactSearch);
+
+    const matchesGroup = !selectedFilterGroupId ||
+      (c.groups && c.groups.some(g => g.id === parseInt(selectedFilterGroupId)));
+
+    return matchesSearch && matchesGroup;
+  });
 
   const toggleContact = (id) => {
     setSelectedContacts(prev =>
@@ -313,13 +328,22 @@ export default function Campaigns() {
                 </button>
               </div>
             </div>
-            <div className="mb-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
               <Input
-                placeholder="Filter contacts..."
+                placeholder="Search contacts..."
                 value={contactSearch}
                 onChange={(e) => setContactSearch(e.target.value)}
                 leftIcon={<Search className="w-4 h-4" />}
               />
+              <Select
+                value={selectedFilterGroupId}
+                onChange={(e) => setSelectedFilterGroupId(e.target.value)}
+              >
+                <option value="">All Groups</option>
+                {groups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name} ({g.count})</option>
+                ))}
+              </Select>
             </div>
             <div className="border border-surface-200 rounded-xl max-h-48 overflow-y-auto scrollbar-thin divide-y divide-surface-50">
               {filteredContacts.length === 0 ? (
@@ -337,7 +361,17 @@ export default function Campaigns() {
                       className="w-4 h-4 rounded accent-brand-600"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-surface-700 truncate">{c.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-surface-700 truncate">{c.name}</p>
+                        {c.groups && c.groups.map(g => (
+                          <span
+                            key={g.id}
+                            className="inline-flex items-center text-[9px] font-semibold bg-brand-50 text-brand-600 px-1 rounded"
+                          >
+                            {g.name}
+                          </span>
+                        ))}
+                      </div>
                       <p className="text-xs text-surface-500">+{c.phone}</p>
                     </div>
                   </label>

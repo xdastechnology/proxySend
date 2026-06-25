@@ -34,6 +34,7 @@ router.get(
     queryParam('page').optional().isInt({ min: 1 }).toInt(),
     queryParam('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
     queryParam('search').optional().trim().isLength({ max: 100 }),
+    queryParam('groupId').optional().isInt().toInt(),
   ],
   validate,
   async (req, res, next) => {
@@ -42,24 +43,42 @@ router.get(
       const page = req.query.page || 1;
       const limit = req.query.limit || 20;
       const search = req.query.search || '';
+      const groupId = req.query.groupId;
       const offset = (page - 1) * limit;
 
-      let whereClause = 'WHERE user_id = $1';
+      let whereClause = 'WHERE c.user_id = $1';
       const params = [userId];
 
       if (search) {
-        whereClause += ' AND (name ILIKE $2 OR phone ILIKE $2 OR email ILIKE $2)';
+        whereClause += ` AND (c.name ILIKE $${params.length + 1} OR c.phone ILIKE $${params.length + 1} OR c.email ILIKE $${params.length + 1})`;
         params.push(`%${search}%`);
       }
 
+      let fromClause = 'contacts c';
+      if (groupId) {
+        fromClause += ' INNER JOIN contact_groups cg ON c.id = cg.contact_id';
+        whereClause += ` AND cg.group_id = $${params.length + 1}`;
+        params.push(groupId);
+      }
+
       const { rows: countRows } = await query(
-        `SELECT COUNT(*) as count FROM contacts ${whereClause}`,
+        `SELECT COUNT(DISTINCT c.id) as count FROM ${fromClause} ${whereClause}`,
         params
       );
       const total = parseInt(countRows[0].count);
 
       const { rows: contacts } = await query(
-        `SELECT * FROM contacts ${whereClause} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        `SELECT c.*,
+                COALESCE(
+                  (SELECT json_agg(json_build_object('id', g.id, 'name', g.name))
+                   FROM contact_groups cg2
+                   JOIN groups g ON cg2.group_id = g.id
+                   WHERE cg2.contact_id = c.id),
+                  '[]'::json
+                ) as groups
+         FROM ${fromClause} ${whereClause}
+         ORDER BY c.created_at DESC
+         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         [...params, limit, offset]
       );
 
@@ -73,6 +92,76 @@ router.get(
   }
 );
 
+// GET user's groups
+router.get('/groups', async (req, res, next) => {
+  try {
+    const userId = req.session.userId;
+    const { rows } = await query(
+      `SELECT g.id, g.name, COUNT(cg.contact_id)::int as count
+       FROM groups g
+       LEFT JOIN contact_groups cg ON g.id = cg.group_id
+       WHERE g.user_id = $1
+       GROUP BY g.id, g.name
+       ORDER BY g.name ASC`,
+      [userId]
+    );
+    res.json({ groups: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST new group
+router.post(
+  '/groups',
+  [
+    body('name').trim().notEmpty().withMessage('Group name is required').isLength({ max: 100 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { name } = req.body;
+      const userId = req.session.userId;
+
+      // Check if group already exists
+      const { rows: dup } = await query(
+        'SELECT id, name FROM groups WHERE user_id = $1 AND name = $2',
+        [userId, name]
+      );
+      if (dup.length) {
+        return res.status(409).json({ error: 'Group with this name already exists', group: dup[0] });
+      }
+
+      const { rows } = await query(
+        'INSERT INTO groups (user_id, name) VALUES ($1, $2) RETURNING id, name',
+        [userId, name]
+      );
+      res.status(201).json({ group: rows[0] });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// DELETE a group
+router.delete('/groups/:id', async (req, res, next) => {
+  try {
+    const userId = req.session.userId;
+    const groupId = req.params.id;
+
+    const result = await query(
+      'DELETE FROM groups WHERE id = $1 AND user_id = $2',
+      [groupId, userId]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Search contacts (live)
 router.get('/search', async (req, res, next) => {
   try {
@@ -82,7 +171,17 @@ router.get('/search', async (req, res, next) => {
     }
     const search = `%${String(q).trim()}%`;
     const { rows: contacts } = await query(
-      'SELECT * FROM contacts WHERE user_id = $1 AND (name ILIKE $2 OR phone ILIKE $2 OR email ILIKE $2) ORDER BY name ASC LIMIT 50',
+      `SELECT c.*,
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', g.id, 'name', g.name))
+                 FROM contact_groups cg
+                 JOIN groups g ON cg.group_id = g.id
+                 WHERE cg.contact_id = c.id),
+                '[]'::json
+              ) as groups
+       FROM contacts c
+       WHERE c.user_id = $1 AND (c.name ILIKE $2 OR c.phone ILIKE $2 OR c.email ILIKE $2)
+       ORDER BY c.name ASC LIMIT 50`,
       [req.session.userId, search]
     );
     res.json({ contacts });
@@ -97,6 +196,7 @@ router.get(
   [
     queryParam('limit').optional().isInt({ min: 1, max: 1000 }).toInt(),
     queryParam('search').optional().trim().isLength({ max: 100 }),
+    queryParam('groupId').optional().isInt().toInt(),
   ],
   validate,
   async (req, res, next) => {
@@ -104,17 +204,33 @@ router.get(
       const userId = req.session.userId;
       const limit = req.query.limit || 200;
       const search = req.query.search || '';
+      const groupId = req.query.groupId;
 
       const params = [userId];
-      let whereClause = 'WHERE user_id = $1';
+      let whereClause = 'WHERE c.user_id = $1';
 
       if (search) {
-        whereClause += ' AND (name ILIKE $2 OR phone ILIKE $2 OR email ILIKE $2)';
+        whereClause += ` AND (c.name ILIKE $${params.length + 1} OR c.phone ILIKE $${params.length + 1} OR c.email ILIKE $${params.length + 1})`;
         params.push(`%${search}%`);
       }
 
+      let fromClause = 'contacts c';
+      if (groupId) {
+        fromClause += ' INNER JOIN contact_groups cg ON c.id = cg.contact_id';
+        whereClause += ` AND cg.group_id = $${params.length + 1}`;
+        params.push(groupId);
+      }
+
       const { rows: contacts } = await query(
-        `SELECT id, name, phone, email, gender FROM contacts ${whereClause} ORDER BY id DESC LIMIT $${params.length + 1}`,
+        `SELECT c.id, c.name, c.phone, c.email, c.gender,
+                COALESCE(
+                  (SELECT json_agg(json_build_object('id', g.id, 'name', g.name))
+                   FROM contact_groups cg2
+                   JOIN groups g ON cg2.group_id = g.id
+                   WHERE cg2.contact_id = c.id),
+                  '[]'::json
+                ) as groups
+         FROM ${fromClause} ${whereClause} ORDER BY c.id DESC LIMIT $${params.length + 1}`,
         [...params, limit]
       );
 
@@ -129,7 +245,16 @@ router.get(
 router.get('/:id', async (req, res, next) => {
   try {
     const { rows } = await query(
-      'SELECT * FROM contacts WHERE id = $1 AND user_id = $2',
+      `SELECT c.*,
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', g.id, 'name', g.name))
+                 FROM contact_groups cg
+                 JOIN groups g ON cg.group_id = g.id
+                 WHERE cg.contact_id = c.id),
+                '[]'::json
+              ) as groups
+       FROM contacts c
+       WHERE c.id = $1 AND c.user_id = $2`,
       [req.params.id, req.session.userId]
     );
     const contact = rows[0];
@@ -152,11 +277,12 @@ router.post(
       .isIn(['male', 'female', 'other', 'unspecified'])
       .withMessage('Invalid gender'),
     body('validateWhatsApp').optional().isBoolean(),
+    body('groupIds').optional().isArray().withMessage('groupIds must be an array'),
   ],
   validate,
   async (req, res, next) => {
     try {
-      const { name, phone, email, gender = 'unspecified', validateWhatsApp } = req.body;
+      const { name, phone, email, gender = 'unspecified', validateWhatsApp, groupIds } = req.body;
       const userId = req.session.userId;
 
       const normalized = normalizePhone(phone);
@@ -189,8 +315,35 @@ router.post(
         'INSERT INTO contacts (user_id, name, phone, email, gender) VALUES ($1, $2, $3, $4, $5) RETURNING id',
         [userId, name, normalized, email || null, gender]
       );
+      const contactId = insertRows[0].id;
 
-      const { rows } = await query('SELECT * FROM contacts WHERE id = $1', [insertRows[0].id]);
+      // Handle group association
+      if (groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
+        // Validate groupIds belong to user
+        const { rows: userGroups } = await query(
+          'SELECT id FROM groups WHERE user_id = $1 AND id = ANY($2::int[])',
+          [userId, groupIds]
+        );
+        const validGroupIds = userGroups.map(g => g.id);
+
+        if (validGroupIds.length > 0) {
+          const insertValues = validGroupIds.map(gid => `(${contactId}, ${gid})`).join(', ');
+          await query(`INSERT INTO contact_groups (contact_id, group_id) VALUES ${insertValues} ON CONFLICT DO NOTHING`);
+        }
+      }
+
+      const { rows } = await query(
+        `SELECT c.*,
+                COALESCE(
+                  (SELECT json_agg(json_build_object('id', g.id, 'name', g.name))
+                   FROM contact_groups cg
+                   JOIN groups g ON cg.group_id = g.id
+                   WHERE cg.contact_id = c.id),
+                  '[]'::json
+                ) as groups
+         FROM contacts c WHERE c.id = $1`,
+        [contactId]
+      );
       res.status(201).json({ contact: rows[0] });
     } catch (err) {
       next(err);
@@ -209,11 +362,12 @@ router.put(
       .optional()
       .isIn(['male', 'female', 'other', 'unspecified'])
       .withMessage('Invalid gender'),
+    body('groupIds').optional().isArray().withMessage('groupIds must be an array'),
   ],
   validate,
   async (req, res, next) => {
     try {
-      const { name, phone, email, gender = 'unspecified' } = req.body;
+      const { name, phone, email, gender = 'unspecified', groupIds } = req.body;
       const userId = req.session.userId;
       const contactId = req.params.id;
 
@@ -242,7 +396,36 @@ router.put(
         [name, normalized, email || null, gender, contactId, userId]
       );
 
-      const { rows } = await query('SELECT * FROM contacts WHERE id = $1', [contactId]);
+      // Handle group association
+      // Clear existing group associations first
+      await query('DELETE FROM contact_groups WHERE contact_id = $1', [contactId]);
+
+      if (groupIds && Array.isArray(groupIds) && groupIds.length > 0) {
+        // Validate groupIds belong to user
+        const { rows: userGroups } = await query(
+          'SELECT id FROM groups WHERE user_id = $1 AND id = ANY($2::int[])',
+          [userId, groupIds]
+        );
+        const validGroupIds = userGroups.map(g => g.id);
+
+        if (validGroupIds.length > 0) {
+          const insertValues = validGroupIds.map(gid => `(${contactId}, ${gid})`).join(', ');
+          await query(`INSERT INTO contact_groups (contact_id, group_id) VALUES ${insertValues} ON CONFLICT DO NOTHING`);
+        }
+      }
+
+      const { rows } = await query(
+        `SELECT c.*,
+                COALESCE(
+                  (SELECT json_agg(json_build_object('id', g.id, 'name', g.name))
+                   FROM contact_groups cg
+                   JOIN groups g ON cg.group_id = g.id
+                   WHERE cg.contact_id = c.id),
+                  '[]'::json
+                ) as groups
+         FROM contacts c WHERE c.id = $1`,
+        [contactId]
+      );
       res.json({ contact: rows[0] });
     } catch (err) {
       next(err);
@@ -271,6 +454,18 @@ router.post('/import', csvUpload.single('file'), async (req, res, next) => {
   try {
     const userId = req.session.userId;
     const waConnected = waService.getStatus(userId) === 'connected';
+    const { groupName } = req.body;
+
+    let groupId = null;
+    if (groupName && String(groupName).trim()) {
+      const { rows: groupRows } = await query(
+        `INSERT INTO groups (user_id, name) VALUES ($1, $2)
+         ON CONFLICT (user_id, name) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+         RETURNING id`,
+        [userId, String(groupName).trim()]
+      );
+      groupId = groupRows[0].id;
+    }
 
     const { contacts: parsed } = await parseContactsCSV(req.file.buffer);
 
@@ -302,6 +497,12 @@ router.post('/import', csvUpload.single('file'), async (req, res, next) => {
       );
       if (dupRows.length) {
         skippedDuplicate++;
+        if (groupId) {
+          await query(
+            'INSERT INTO contact_groups (contact_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [dupRows[0].id, groupId]
+          );
+        }
         continue;
       }
 
@@ -318,10 +519,17 @@ router.post('/import', csvUpload.single('file'), async (req, res, next) => {
         }
       }
 
-      await query(
-        'INSERT INTO contacts (user_id, name, phone, email, gender) VALUES ($1, $2, $3, $4, $5)',
+      const { rows: insertRows } = await query(
+        'INSERT INTO contacts (user_id, name, phone, email, gender) VALUES ($1, $2, $3, $4, $5) RETURNING id',
         [userId, row.name, normalized, row.email || null, row.gender || 'unspecified']
       );
+
+      if (groupId && insertRows.length > 0) {
+        await query(
+          'INSERT INTO contact_groups (contact_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [insertRows[0].id, groupId]
+        );
+      }
 
       imported++;
     }

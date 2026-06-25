@@ -295,6 +295,33 @@ const migrations = [
       await query(`ALTER TABLE credit_transactions DROP COLUMN IF EXISTS settlement_note CASCADE`);
     },
   },
+  {
+    version: 7,
+    name: 'groups_and_contact_mappings',
+    up: async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS groups (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, name)
+        )
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS idx_groups_user_id ON groups(user_id)`);
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS contact_groups (
+          contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+          group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+          PRIMARY KEY (contact_id, group_id)
+        )
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS idx_cg_contact_id ON contact_groups(contact_id)`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_cg_group_id ON contact_groups(group_id)`);
+    },
+  },
 ];
 
 async function runMigrations() {

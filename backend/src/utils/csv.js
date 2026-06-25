@@ -71,12 +71,16 @@ async function parseContactsCSV(buffer) {
   const cols = detectColumns(headers);
 
   const contacts = records.map((row) => {
-    const values = Object.values(row);
+    const nameKey = cols.nameIdx >= 0 ? headers[cols.nameIdx] : null;
+    const phoneKey = cols.phoneIdx >= 0 ? headers[cols.phoneIdx] : null;
+    const emailKey = cols.emailIdx >= 0 ? headers[cols.emailIdx] : null;
+    const genderKey = cols.genderIdx >= 0 ? headers[cols.genderIdx] : null;
+
     return {
-      name: cols.nameIdx >= 0 ? String(values[cols.nameIdx] || '').trim() : '',
-      phone: cols.phoneIdx >= 0 ? String(values[cols.phoneIdx] || '').trim() : '',
-      email: cols.emailIdx >= 0 ? String(values[cols.emailIdx] || '').trim() : '',
-      gender: cols.genderIdx >= 0 ? normalizeGender(values[cols.genderIdx]) : 'unspecified',
+      name: nameKey ? String(row[nameKey] || '').trim() : '',
+      phone: phoneKey ? String(row[phoneKey] || '').trim() : '',
+      email: emailKey ? String(row[emailKey] || '').trim() : '',
+      gender: genderKey ? normalizeGender(row[genderKey]) : 'unspecified',
     };
   });
 
